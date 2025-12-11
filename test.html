@@ -1,0 +1,2069 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Winds資產分配計畫</title>
+    <!-- 載入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Font Awesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <!-- 載入 Google Fonts (Noto Serif TC for titles, Noto Sans TC for body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;700&family=Noto+Serif+TC:wght=500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Wabi-Sabi Style Configuration */
+        :root {
+            /* 主色: 沉靜、泥土色調的深棕灰 */
+            --color-primary: #544C4A; 
+            /* 背景色: 柔和、米白色的亞麻色 */
+            --color-secondary: #F7F4F1; 
+            /* 點綴色: 溫暖、內斂的陶土色 */
+            --color-accent: #A88F78; 
+            /* 邊框/線條: 略淺的柔和灰色 */
+            --color-border: #E0DCD7; 
+        }
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: var(--color-secondary);
+            color: var(--color-primary);
+        }
+
+        .font-serif-tc {
+            font-family: 'Noto Serif TC', serif;
+        }
+
+        .bg-primary { background-color: var(--color-primary); }
+        .text-primary { color: var(--color-primary); }
+        .bg-accent { background-color: var(--color-accent); }
+        .text-accent { color: var(--color-accent); }
+        .border-base { border-color: var(--color-border); }
+        
+        /* 底部導航按鈕樣式 */
+        .nav-button.active {
+            color: var(--color-accent);
+            border-top: 2px solid var(--color-accent);
+        }
+
+        /* 隱藏滾動條 */
+        .custom-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .custom-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+
+        /* Modal 動畫 */
+        .modal-enter {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        .modal-enter-active {
+            opacity: 1;
+            transform: scale(1);
+            transition: opacity 300ms, transform 300ms;
+        }
+        .modal-exit {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .modal-exit-active {
+            opacity: 0;
+            transform: scale(0.95);
+            transition: opacity 200ms, transform 200ms;
+        }
+    </style>
+</head>
+<body class="min-h-screen antialiased flex flex-col">
+
+    <!-- 頂部標題 -->
+    <header class="bg-secondary/80 backdrop-blur-sm shadow-sm sticky top-0 z-10 border-b border-base">
+        <div class="max-w-xl mx-auto px-4 py-3">
+            <h1 class="text-xl font-serif-tc font-bold text-primary tracking-wide">
+                <i class="fas fa-seedling text-accent mr-2"></i>Winds 資產分配計畫
+            </h1>
+        </div>
+    </header>
+
+    <!-- 主要內容區塊 -->
+    <main id="main-content" class="flex-grow max-w-xl mx-auto w-full p-4 pb-20 custom-scrollbar">
+        
+        <!-- Tab 內容容器 -->
+        <div id="tab-container" class="space-y-6">
+            
+            <!-- 1. 資產分配 Tab (Assets) -->
+            <section id="assets-tab" class="tab-content hidden">
+                <h2 class="text-2xl font-serif-tc font-bold mb-4">個人資產概覽</h2>
+                <div id="asset-summary" class="bg-primary text-white p-4 rounded-xl shadow-lg mb-6">
+                    <p class="text-sm opacity-80">個人總淨資產 (TWD)</p>
+                    <p id="total-asset-twd" class="text-3xl font-bold mt-1 tracking-wider">TWD 0</p>
+                    <p id="exchange-rate-display" class="text-xs opacity-70 mt-2">
+                        匯率更新：USD=32.0, CNY=4.4
+                    </p>
+                </div>
+
+                <h3 class="text-xl font-serif-tc font-semibold mb-3 border-b pb-2 border-base">投資與帳戶明細</h3>
+                <div id="asset-accordion" class="space-y-3">
+                    <!-- Assets will be rendered here -->
+                </div>
+            </section>
+            
+            <!-- 2. 每月理財規劃 Tab (Plan) -->
+            <section id="plan-tab" class="tab-content hidden">
+                <h2 class="text-2xl font-serif-tc font-bold mb-4">每月理財規劃</h2>
+                
+                <!-- 固定收入與支出區塊 (移至最上方) -->
+                <div class="bg-white p-4 rounded-xl shadow-lg mb-6">
+                    <!-- 收入 -->
+                    <div class="flex justify-between items-center pb-2 border-b border-base mb-3">
+                        <p class="text-lg font-semibold text-primary">每月固定收入</p>
+                        <div class="flex items-center">
+                            <span class="text-xl font-bold text-green-700 mr-1">TWD</span>
+                            <input type="number" id="monthly-income-input" 
+                                   class="text-xl font-bold text-green-700 w-24 bg-transparent border-b border-dashed border-green-700/50 focus:outline-none focus:border-green-700 text-right"
+                                   onchange="updateMonthlyIncome(this.value)">
+                        </div>
+                    </div>
+                    
+                    <!-- 總固定支出 (可點擊展開) -->
+                    <div>
+                        <button class="w-full flex justify-between items-center focus:outline-none" onclick="toggleAccordion('fixed-expenses-details-container')">
+                            <div class="flex items-center">
+                                <p class="text-lg font-semibold text-primary mr-2">每月總固定支出</p>
+                                <i class="fas fa-chevron-down text-xs text-gray-400 transition-transform duration-300" id="fixed-expenses-details-container-icon"></i>
+                            </div>
+                            <p id="total-fixed-expense" class="text-xl font-bold text-red-700">TWD 0</p>
+                        </button>
+                        
+                        <!-- 固定支出細項 (可編輯, 預設收起) -->
+                        <div id="fixed-expenses-details-container" class="hidden mt-3 pt-3 border-t border-dashed border-gray-200">
+                            <div id="fixed-expenses-list" class="space-y-3">
+                                <!-- Fixed expenses items will be rendered here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 每月流動支出 -->
+                <h3 class="text-xl font-serif-tc font-semibold mb-3 border-b pb-2 border-base">每月流動支出</h3>
+                <div id="fluid-expenses-list" class="space-y-2 bg-white p-4 rounded-xl shadow-md border border-base mb-6">
+                    <!-- Fluid expenses will be rendered here -->
+                </div>
+
+                <!-- 下月卡費預備金監控 (改為下拉式開合) -->
+                <div class="bg-white p-4 rounded-xl shadow-lg mb-6 border border-base">
+                    <button class="w-full flex justify-between items-center pb-2 border-b border-base focus:outline-none" onclick="toggleAccordion('credit-card-prep-content')">
+                        <div class="flex items-center">
+                             <h3 class="text-lg font-serif-tc font-bold text-primary">
+                                <i class="fas fa-credit-card text-accent mr-2"></i>下月卡費預備金監控
+                            </h3>
+                            <span class="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">依帳單週期計算</span>
+                        </div>
+                        <i class="fas fa-chevron-down text-sm transition-transform duration-300 transform" id="credit-card-prep-content-icon"></i>
+                    </button>
+                    
+                    <!-- 預設收起 -->
+                    <div id="credit-card-prep-content" class="hidden mt-4 space-y-4">
+                        <div id="credit-card-prep-list" class="space-y-4">
+                            <!-- Content populated by JS -->
+                        </div>
+                    </div>
+                </div>
+                
+            </section>
+
+            <!-- 3. 記帳 Tab (Bookkeeping) -->
+            <section id="bookkeeping-tab" class="tab-content hidden">
+                <h2 class="text-2xl font-serif-tc font-bold mb-4">每日記帳</h2>
+                
+                <!-- 記帳表單 -->
+                <div class="bg-white p-4 rounded-xl shadow-lg mb-6 border border-base">
+                    <h3 class="text-xl font-semibold mb-4">新增支出/收入/轉帳</h3>
+                    <form id="transaction-form" class="space-y-4">
+                        
+                        <div>
+                            <input type="date" id="transaction-date" required class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent bg-white text-gray-700 font-medium">
+                        </div>
+
+                        <div class="flex space-x-2">
+                             <select id="transaction-type" class="w-24 p-3 border rounded-lg focus:ring-accent focus:border-accent bg-gray-50" required>
+                                <option value="expense" selected>支出</option>
+                                <option value="income">收入</option>
+                                <option value="transfer">轉帳</option>
+                            </select>
+                            <select id="transaction-category" class="flex-1 p-3 border rounded-lg focus:ring-accent focus:border-accent bg-white" required>
+                                <option value="" disabled selected>分類</option>
+                                <!-- Categories populated by JS -->
+                            </select>
+                            <select id="transaction-subcategory" class="flex-1 p-3 border rounded-lg focus:ring-accent focus:border-accent bg-white" required>
+                                <option value="" disabled selected>細項</option>
+                                <!-- Subcategories populated by JS -->
+                            </select>
+                        </div>
+                        
+                        <div id="row-account-selection" class="flex space-x-2">
+                            <select id="transaction-account" class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent" required>
+                                <option value="" disabled selected>選擇帳戶/卡片</option>
+                            </select>
+                        </div>
+
+                        <div class="flex space-x-2">
+                            <input type="number" id="transaction-amount" placeholder="金額" required min="0" step="any"
+                                   class="w-full p-3 border rounded-l-lg focus:ring-accent focus:border-accent">
+                            <select id="transaction-currency" class="p-3 border rounded-r-lg focus:ring-accent focus:border-accent w-20">
+                                <option value="TWD" selected>TWD</option>
+                                <option value="USD">USD</option>
+                                <option value="CNY">CNY</option>
+                            </select>
+                        </div>
+
+                        <!-- 備註輸入 -->
+                        <div class="space-y-1">
+                            <label class="block text-sm font-medium text-gray-700">備註</label>
+                            <input type="text" id="transaction-note" placeholder="輸入備註事項..." 
+                                   class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent bg-white text-gray-700">
+                        </div>
+
+                        <button type="submit" class="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition duration-150 shadow-md">
+                            <i class="fas fa-plus mr-2"></i>記錄
+                        </button>
+                    </form>
+                </div>
+
+                <!-- 歷史紀錄 (Accordion Style) -->
+                <div class="bg-white rounded-xl shadow-md border border-base mb-6 overflow-hidden">
+                    <button class="w-full flex justify-between items-center p-4 font-serif-tc font-semibold text-xl text-primary bg-secondary/20" onclick="toggleAccordion('history-accordion-content')">
+                        <span>歷史記帳紀錄</span>
+                        <i class="fas fa-chevron-down text-sm ml-3 transition-transform duration-300 transform" id="history-accordion-content-icon"></i>
+                    </button>
+                    
+                    <div id="history-accordion-content" class="hidden">
+                        <ul id="transaction-history" class="space-y-2 p-2">
+                            <li class="text-center text-gray-500 p-4">載入中...</li>
+                        </ul>
+                        <div id="load-more-container" class="p-3 text-center border-t border-base/50 hidden">
+                            <button onclick="loadMoreTransactions()" class="text-accent font-semibold text-sm hover:text-primary transition">
+                                <i class="fas fa-ellipsis-h mr-1"></i>查看更多紀錄
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 本月支出/收入統計 -->
+                <h3 class="text-xl font-serif-tc font-semibold mb-3 border-b pb-2 border-base mt-8">本月支出/收入統計</h3>
+                <div class="bg-white p-4 rounded-xl shadow-lg border border-base">
+                    <div class="flex justify-between items-center mb-4">
+                        <p id="stats-date-range" class="text-sm text-gray-500 font-medium">統計區間: --/-- ~ --/--</p>
+                        <span class="bg-accent/10 text-accent text-xs px-2 py-1 rounded-full">每月5號結算</span>
+                    </div>
+                    
+                    <!-- 修改：並排顯示收入與支出 -->
+                    <div class="grid grid-cols-2 gap-4 mb-4 text-center">
+                        <div class="p-2 bg-green-50 rounded-lg">
+                            <p class="text-sm text-gray-600">本月總收入</p>
+                            <p id="stats-total-income" class="text-xl font-bold text-green-700 mt-1">TWD 0</p>
+                        </div>
+                        <div class="p-2 bg-red-50 rounded-lg">
+                            <p class="text-sm text-gray-600">本月總支出</p>
+                            <p id="stats-total-expense" class="text-xl font-bold text-red-700 mt-1">TWD 0</p>
+                        </div>
+                    </div>
+
+                    <div id="monthly-stats-list" class="space-y-3">
+                        <!-- Stats will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- 本年度每月支出/收入統計 (New) -->
+                <h3 class="text-xl font-serif-tc font-semibold mb-3 border-b pb-2 border-base mt-8">本年度每月支出/收入統計</h3>
+                <div class="bg-white p-4 rounded-xl shadow-lg border border-base">
+                     <p class="text-sm text-gray-500 font-medium mb-3 text-right">統計週期：自然月 (每月1號~月底)</p>
+                     <div id="yearly-stats-container" class="space-y-3">
+                         <!-- Yearly stats populated by JS -->
+                     </div>
+                </div>
+
+                <!-- 歷年每月支出/收入統計 (New) -->
+                <h3 class="text-xl font-serif-tc font-semibold mb-3 border-b pb-2 border-base mt-8">歷年每月支出/收入統計</h3>
+                <div class="bg-white p-4 rounded-xl shadow-lg border border-base">
+                     <div class="flex justify-between items-center mb-4">
+                        <label for="history-year-select" class="text-primary font-medium">選擇年度：</label>
+                        <select id="history-year-select" class="p-2 border rounded-lg focus:ring-accent focus:border-accent bg-secondary/20">
+                            <!-- Years populated by JS -->
+                        </select>
+                     </div>
+                     <div id="history-year-stats-container" class="space-y-3">
+                         <p class="text-center text-gray-500 py-4">請選擇年度以查看統計</p>
+                     </div>
+                </div>
+
+            </section>
+            
+            <!-- 4. 共同帳戶 Tab (Joint Account) -->
+            <section id="joint-tab" class="tab-content hidden">
+                <h2 class="text-2xl font-serif-tc font-bold mb-4">共同帳戶管理</h2>
+                
+                <div class="bg-accent text-white p-4 rounded-xl shadow-lg mb-6">
+                    <p class="text-sm opacity-80">共同帳戶目前總資產 (TWD)</p>
+                    <p id="joint-asset-twd" class="text-3xl font-bold mt-1 tracking-wider">TWD 0</p>
+                </div>
+                
+                <h3 class="text-xl font-serif-tc font-semibold mb-3 border-b pb-2 border-base">每月共同帳戶收支概覽</h3>
+                <div class="bg-white p-4 rounded-xl shadow-lg border border-base">
+                    <!-- Dynamic Joint Expenses Content -->
+                    <div id="joint-expenses-placeholder" class="space-y-2">
+                        <!-- Content will be injected by renderJointAccount -->
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- 5. 距離存到100萬還有 Tab (Goal) -->
+            <section id="goal-tab" class="tab-content hidden">
+                <h2 class="text-2xl font-serif-tc font-bold mb-4">百萬目標追蹤</h2>
+                
+                <div class="bg-white p-6 rounded-xl shadow-lg border-2 border-accent text-center">
+                    <p class="text-lg text-primary font-serif-tc">目標金額</p>
+                    <p class="text-4xl font-bold text-accent my-3 tracking-wider">TWD 1,000,000</p>
+                    
+                    <div id="goal-status">
+                        <!-- Goal calculation results here -->
+                    </div>
+                </div>
+
+                <div class="mt-8 bg-white p-4 rounded-xl shadow-lg border border-base">
+                    <h3 class="text-xl font-semibold mb-3">資產與目標進度</h3>
+                    <div class="w-full bg-gray-200 rounded-full h-4">
+                        <div id="goal-progress-bar" class="bg-accent h-4 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <p id="goal-percent-display" class="text-right text-sm mt-1 text-gray-600">0%</p>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- 底部導航列 -->
+    <nav class="fixed bottom-0 left-0 w-full bg-white border-t border-base shadow-2xl z-20">
+        <div class="max-w-xl mx-auto flex justify-around">
+            <button class="nav-button flex flex-col items-center justify-center p-3 text-gray-500 transition duration-200 active" data-tab="assets">
+                <i class="fas fa-money-check-dollar text-xl"></i>
+                <span class="text-xs mt-1">資產分配</span>
+            </button>
+            <button class="nav-button flex flex-col items-center justify-center p-3 text-gray-500 transition duration-200" data-tab="plan">
+                <i class="fas fa-chart-pie text-xl"></i>
+                <span class="text-xs mt-1">理財規劃</span>
+            </button>
+            <button class="nav-button flex flex-col items-center justify-center p-3 text-gray-500 transition duration-200" data-tab="bookkeeping">
+                <i class="fas fa-file-invoice-dollar text-xl"></i>
+                <span class="text-xs mt-1">記帳</span>
+            </button>
+            <button class="nav-button flex flex-col items-center justify-center p-3 text-gray-500 transition duration-200" data-tab="joint">
+                <i class="fas fa-handshake text-xl"></i>
+                <span class="text-xs mt-1">共同帳戶</span>
+            </button>
+            <button class="nav-button flex flex-col items-center justify-center p-3 text-gray-500 transition duration-200" data-tab="goal">
+                <i class="fas fa-bullseye text-xl"></i>
+                <span class="text-xs mt-1">百萬目標</span>
+            </button>
+        </div>
+    </nav>
+    
+    <!-- 編輯 Modal (Hidden by default) -->
+    <div id="edit-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeEditModal()"></div>
+        <div class="bg-white w-11/12 max-w-md p-6 rounded-2xl shadow-2xl relative z-10 transform transition-all scale-100">
+            <h3 class="text-xl font-bold mb-4 text-primary">修改記帳紀錄</h3>
+            <form id="edit-transaction-form" class="space-y-4">
+                <input type="hidden" id="edit-id">
+                
+                <div>
+                    <label class="block text-sm text-gray-600 mb-1">日期</label>
+                    <input type="date" id="edit-date" required class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent">
+                </div>
+
+                <div>
+                    <label class="block text-sm text-gray-600 mb-1">金額</label>
+                    <input type="number" id="edit-amount" required min="0" step="any" class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent">
+                </div>
+                
+                <div>
+                    <label class="block text-sm text-gray-600 mb-1">備註</label>
+                    <input type="text" id="edit-note" class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent">
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 font-medium">取消</button>
+                    <button type="submit" class="px-6 py-2 bg-accent text-white rounded-lg font-bold hover:bg-accent/90 shadow-md">儲存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 刪除確認 Modal (New) -->
+    <div id="delete-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeleteModal()"></div>
+        <div class="bg-white w-11/12 max-w-sm p-6 rounded-2xl shadow-2xl relative z-10 transform transition-all scale-100 text-center">
+            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-exclamation-triangle text-2xl text-red-600"></i>
+            </div>
+            <h3 class="text-xl font-bold mb-2 text-primary">確定要刪除嗎？</h3>
+            <p class="text-sm text-gray-500 mb-6">此動作無法復原，您確定要刪除這筆記帳紀錄嗎？</p>
+            
+            <div class="flex space-x-3">
+                <button onclick="closeDeleteModal()" class="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition">取消</button>
+                <button onclick="confirmDelete()" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-md transition">確認刪除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS 腳本區 -->
+    <script>
+        // --- 核心資料與設定 ---
+        const LOCAL_STORAGE_KEY = 'winds_finance_data';
+        const GOAL_AMOUNT = 1000000;
+        // MONTHLY_INCOME 不再是常數，改為從 appData 讀取
+        
+        // **預設展開的分類 ID**
+        const DEFAULT_OPEN_CATEGORIES = [
+            'accordion-現金與帳戶',
+            'accordion-證券戶'
+        ];
+
+        // 新增：信用卡分類資料 (加入 linkedAccount 與 billingDay)
+        const CREDIT_CARDS = [
+            { name: "台新richart卡(玫瑰卡&gogo卡)", currency: "TWD", linkedAccount: "台新RICHART帳戶", billingDay: 7 },
+            { name: "玉山ubear卡", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5 },
+            { name: "玉山unicard卡", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5 },
+            { name: "國泰cube卡", currency: "TWD", linkedAccount: "國泰cube帳戶", billingDay: 5 },
+            { name: "星展現金回饋卡", currency: "TWD", linkedAccount: "星展銀行帳戶", billingDay: 7 },
+            { name: "聯邦吉鶴卡", currency: "TWD", linkedAccount: "聯邦newnewbank帳戶", billingDay: 3 }
+        ];
+
+        // 記帳分類與細項 (支出)
+        const EXPENSE_CATEGORIES = {
+            "飲食": ["早餐", "午餐", "晚餐", "點心", "零食", "飲料", "其他"],
+            "交通": ["加油費", "停車費", "計程車", "高鐵票", "火車票", "捷運票", "CAT-8625 支出", "MEL-7075 支出", "其他"],
+            "娛樂": ["電影", "門票", "訂閱", "遊戲", "出遊旅費", "其他"],
+            "購物": ["衣服", "配件", "美妝", "家電", "禮物", "巧郎運費", "日用品", "其他"],
+            "個人": ["電話費", "捐款", "寵物", "保險", "其他"],
+            "醫療": ["門診", "藥品", "醫療用品", "打針", "健康檢查", "其他"],
+            "美容美髮": ["用頭髮", "按摩", "其他"],
+            "家庭": ["孝親費", "懷孕相關", "小孩相關", "其他"]
+        };
+
+        // 記帳分類 (收入)
+        const INCOME_CATEGORIES_LIST = [
+            "薪水", "獎金", "韵禾苑", "還款", "股利", "交易", "利息", "退款", "隊友貢獻", "其他"
+        ];
+
+        // 用戶提供的初始靜態資產數據
+        const STATIC_ASSETS = [
+            // category: 現金與帳戶
+            { id: 'asset-1', name: "現金", amount: 514, currency: "TWD", type: "cash", category: "現金與帳戶" }, 
+            { id: 'asset-2', name: "IPASSMONEY", amount: 2231, currency: "TWD", type: "cash", category: "現金與帳戶" }, 
+            { id: 'asset-3', name: "永豐大戶銀行帳戶", amount: 239, currency: "TWD", type: "cash", category: "現金與帳戶" }, 
+            { id: 'asset-4', name: "台新RICHART(天然石帳戶)", amount: 11186, currency: "TWD", type: "cash", category: "現金與帳戶" }, 
+            { id: 'asset-5', name: "中國信託(天然石帳戶)", amount: 24593, currency: "TWD", type: "cash", category: "現金與帳戶" }, 
+            { id: 'asset-6', name: "國泰外幣帳戶", amount: 5.16, currency: "USD", type: "cash", category: "現金與帳戶" }, 
+            { id: 'asset-7', name: "富邦華一銀行帳戶", amount: 293.4, currency: "CNY", type: "cash", category: "現金與帳戶" },
+            { id: 'asset-8', name: "台新RICHART帳戶", amount: 1190, currency: "TWD", type: "cash", category: "現金與帳戶" },
+            { id: 'asset-9', name: "台新薪轉帳戶", amount: 127388, currency: "TWD", type: "cash", category: "現金與帳戶" },
+            // 新增的扣款帳戶 (初始金額設為0)
+            { id: 'asset-12', name: "玉山數位帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
+            { id: 'asset-13', name: "國泰cube帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
+            { id: 'asset-14', name: "星展銀行帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
+            { id: 'asset-15', name: "聯邦newnewbank帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
+            // category: 證券戶
+            { id: 'asset-10', name: "永豐大戶投", amount: 356695, currency: "TWD", type: "investment", category: "證券戶" }, 
+            { id: 'asset-11', name: "國泰證券", amount: 2402.00, currency: "USD", type: "investment", category: "證券戶" }, 
+        ];
+        
+        // 共同帳戶獨立處理，以便記帳時選擇
+        const JOINT_ACCOUNT_INITIAL = { id: 'joint-0', name: "共同帳戶", amount: 0, currency: "TWD", type: "joint", category: "共同帳戶" };
+
+        // 每月固定支出清單 (現在是預設值，之後會存入 appData)
+        const FIXED_EXPENSES_DEFAULT = [
+            // type: "TWD" 預設為 TWD，如果不是 TWD 則需要轉換
+            { name: "Iphone17分期(至115年9月)", amount: 2491, currency: "TWD"},
+            { name: "公益捐款", amount: 300, currency: "TWD"},
+            { name: "孝親費", amount: 8000, currency: "TWD"},
+            { name: "訂閱", amount: 610, currency: "TWD"},
+            { name: "手機費", amount: 799, currency: "TWD"},
+            { name: "定期定額美股(國泰證券)", amount: 240.2, currency: "USD"},
+            { name: "共同帳戶存入款項", amount: 10000, currency: "TWD"}, 
+        ];
+
+        // 每月流動支出清單
+        const FLUID_EXPENSES = [
+            { name: "零用金", amount: 10000, currency: "TWD"},
+            { name: "備用金額", amount: 10000, currency: "TWD"},
+        ];
+
+        // --- 全域狀態 (從 LocalStorage 載入) ---
+        let appData = {
+            assets: [],
+            jointAccount: JOINT_ACCOUNT_INITIAL,
+            transactions: [],
+            exchangeRates: { TWD: 1, USD: 32.0, CNY: 4.4 }, // 預設匯率
+            monthlyIncome: 50000, // 預設收入
+            fixedExpenses: [] // 預設固定支出 (loadData 會初始化)
+        };
+        
+        // 記帳顯示狀態
+        let showFullHistory = false;
+        
+        // 刪除用狀態
+        let transactionToDeleteId = null;
+
+        // --- 工具函數 ---
+
+        /** * 顯示自定義通知訊息 (取代 alert) 
+         */
+        function showAlert(message, type = 'info') {
+            const typeMap = {
+                success: { bgColor: 'bg-green-500', icon: 'fas fa-check-circle' },
+                danger: { bgColor: 'bg-red-500', icon: 'fas fa-times-circle' },
+                warning: { bgColor: 'bg-yellow-500', icon: 'fas fa-exclamation-triangle' },
+                info: { bgColor: 'bg-blue-500', icon: 'fas fa-info-circle' },
+            };
+            const { bgColor, icon } = typeMap[type] || typeMap.info;
+            const modalId = `modal-${Date.now()}`;
+            const modalHtml = `
+                <div id="${modalId}" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 opacity-0 transform -translate-y-full">
+                    <div class="flex items-center ${bgColor} text-white text-sm font-bold px-4 py-3 rounded-xl shadow-lg" role="alert">
+                        <i class="${icon} mr-2"></i>
+                        <p>${message}</p>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modalElement = document.getElementById(modalId);
+            setTimeout(() => {
+                modalElement.classList.remove('opacity-0', '-translate-y-full');
+                modalElement.classList.add('opacity-100', 'translate-y-0');
+            }, 10);
+            setTimeout(() => {
+                modalElement.classList.remove('opacity-100', 'translate-y-0');
+                modalElement.classList.add('opacity-0', '-translate-y-full');
+                setTimeout(() => modalElement.remove(), 300);
+            }, 3000);
+        }
+
+        /**
+         * 格式化金額為貨幣格式，根據幣種調整小數點位數。
+         * TWD: 0 位
+         * USD/CNY: 2 位
+         * @param {number} amount 
+         * @param {string} currency 
+         * @returns {string} 格式化後的金額字符串
+         */
+        function formatCurrency(amount, currency) {
+            const fractionDigits = (currency === 'USD' || currency === 'CNY') ? 2 : 0;
+            return new Intl.NumberFormat('zh-TW', {
+                style: 'decimal',
+                minimumFractionDigits: fractionDigits,
+                maximumFractionDigits: fractionDigits
+            }).format(amount);
+        }
+
+        /**
+         * 將金額從來源幣種轉換為台幣 (TWD)
+         * @param {number} amount 
+         * @param {string} currency 
+         * @returns {number} TWD value
+         */
+        function convertToTWD(amount, currency) {
+            const rate = appData.exchangeRates[currency] || 1;
+            return amount * rate;
+        }
+
+        /**
+         * 計算所有個人資產的台幣總值 (不包含共同帳戶)
+         * @returns {number}
+         */
+        function calculateTotalAsset() {
+            let totalTWD = 0;
+            appData.assets.forEach(asset => {
+                // 只計算 appData.assets 中的個人資產
+                totalTWD += convertToTWD(asset.amount, asset.currency);
+            });
+            return totalTWD;
+        }
+        
+        /**
+         * 檢查帳戶是否存在，用於記帳時確認共同帳戶是否被選擇
+         * 修改：同時檢查信用卡列表，以允許信用卡記帳
+         * @param {string} accountName 
+         * @returns {object}
+         */
+        function getAccountByName(accountName) {
+            // 合併所有帳戶進行查找 (包含共同帳戶)
+            const allAccounts = [...appData.assets, appData.jointAccount];
+            let account = allAccounts.find(a => a.name === accountName);
+            
+            // 如果在資產帳戶中找不到，檢查是否為信用卡
+            if (!account) {
+                const creditCard = CREDIT_CARDS.find(c => c.name === accountName);
+                if (creditCard) {
+                    // 返回一個臨時對象以通過驗證，type 標記為 credit_card
+                    return { name: creditCard.name, currency: creditCard.currency, type: 'credit_card' };
+                }
+            }
+            
+            return account;
+        }
+
+        // --- LocalStorage 數據管理 ---
+
+        function loadData() {
+            try {
+                const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (savedData) {
+                    const parsedData = JSON.parse(savedData);
+                    // 只覆蓋需要持久化的部分
+                    appData.transactions = parsedData.transactions || [];
+                    appData.exchangeRates = parsedData.exchangeRates || appData.exchangeRates;
+                    appData.jointAccount = parsedData.jointAccount || JOINT_ACCOUNT_INITIAL;
+                    appData.monthlyIncome = parsedData.monthlyIncome || 50000;
+                    // 如果沒有 fixedExpenses (舊資料)，則使用預設值
+                    appData.fixedExpenses = parsedData.fixedExpenses || JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
+                } else {
+                    // 第一次載入，使用預設值
+                    appData.fixedExpenses = JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
+                }
+                
+                // 重新計算資產金額 (初始靜態 + 交易變動)
+                applyTransactionsToAssets();
+
+            } catch (e) {
+                console.error("載入 LocalStorage 失敗:", e);
+                // 如果失敗，則使用預設值
+                appData.assets = JSON.parse(JSON.stringify(STATIC_ASSETS));
+                appData.fixedExpenses = JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
+            }
+        }
+        
+        function applyTransactionsToAssets() {
+            // 1. 重置個人資產金額為初始靜態值 (深複製，避免修改原始靜態數據)
+            appData.assets = JSON.parse(JSON.stringify(STATIC_ASSETS));
+            // 2. 重置共同帳戶為初始值
+            appData.jointAccount = JSON.parse(JSON.stringify(JOINT_ACCOUNT_INITIAL));
+            
+            // 3. 創建一個包含所有帳戶的臨時列表，用於交易應用
+            const allAccountsTemp = [
+                ...appData.assets, 
+                appData.jointAccount 
+            ];
+
+            // 4. 應用所有交易
+            appData.transactions.forEach(t => {
+                const account = allAccountsTemp.find(a => a.name === t.account);
+                
+                // 轉帳邏輯: 處理轉入帳戶
+                let toAccount = null;
+                if (t.type === 'transfer' && t.toAccount) {
+                    toAccount = allAccountsTemp.find(a => a.name === t.toAccount);
+                }
+
+                // 只有當帳戶存在於資產列表時才扣款 (信用卡不會直接扣除現金資產)
+                if (account) {
+                    // 交易金額轉換為該帳戶的幣種
+                    let amountInAccountCurrency = t.amount;
+                    if (t.currency !== account.currency) {
+                        // 1. 轉成 TWD
+                        const TWD_Value = convertToTWD(t.amount, t.currency);
+                        // 2. 轉成帳戶幣種 (假設帳戶幣種的匯率已知)
+                        const accountRate = appData.exchangeRates[account.currency] || 1;
+                        amountInAccountCurrency = TWD_Value / accountRate;
+                    }
+
+                    if (t.type === 'expense') {
+                        account.amount -= amountInAccountCurrency;
+                    } else if (t.type === 'income') {
+                        account.amount += amountInAccountCurrency;
+                    } else if (t.type === 'transfer') {
+                         account.amount -= amountInAccountCurrency;
+                    }
+                }
+                
+                // 處理轉帳的轉入金額
+                if (t.type === 'transfer' && toAccount) {
+                     // 1. 將轉帳金額轉成 TWD
+                     const TWD_Value = convertToTWD(t.amount, t.currency);
+                     // 2. 轉成轉入帳戶的幣種
+                     const toAccountRate = appData.exchangeRates[toAccount.currency] || 1;
+                     const amountInToAccountCurrency = TWD_Value / toAccountRate;
+                     
+                     toAccount.amount += amountInToAccountCurrency;
+                }
+            });
+            
+            // 5. 更新 appData.jointAccount 的最終金額 
+            const jointUpdated = allAccountsTemp.find(a => a.name === JOINT_ACCOUNT_INITIAL.name);
+            if (jointUpdated) {
+                appData.jointAccount = jointUpdated;
+            }
+            
+            // 6. 將個人資產的 amount 屬性修正為兩位小數 (USD/CNY) 或零位小數 (TWD)
+            appData.assets.forEach(asset => {
+                const fraction = (asset.currency === 'USD' || asset.currency === 'CNY') ? 2 : 0;
+                asset.amount = parseFloat(asset.amount.toFixed(fraction));
+            });
+            appData.jointAccount.amount = parseFloat(appData.jointAccount.amount.toFixed(0)); // 共同帳戶固定 TWD
+
+        }
+
+
+        function saveData() {
+            try {
+                const dataToSave = {
+                    transactions: appData.transactions,
+                    exchangeRates: appData.exchangeRates,
+                    jointAccount: appData.jointAccount, // 單獨保存共同帳戶的最終金額
+                    monthlyIncome: appData.monthlyIncome,
+                    fixedExpenses: appData.fixedExpenses // 保存固定支出設定
+                };
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
+            } catch (e) {
+                console.error("保存 LocalStorage 失敗:", e);
+                showAlert('warning', '資料保存失敗，請檢查瀏覽器設定。');
+            }
+        }
+        
+        // --- Tab 導航與內容渲染 ---
+        
+        function setupTabs() {
+            const buttons = document.querySelectorAll('.nav-button');
+            const contents = document.querySelectorAll('.tab-content');
+            
+            function switchTab(targetId) {
+                buttons.forEach(btn => {
+                    const isActive = btn.dataset.tab === targetId;
+                    btn.classList.toggle('active', isActive);
+                    btn.classList.toggle('text-gray-500', !isActive);
+                    btn.classList.toggle('text-accent', isActive);
+                });
+                
+                contents.forEach(content => {
+                    content.classList.toggle('hidden', content.id !== `${targetId}-tab`);
+                });
+                
+                // 渲染當前選中 Tab 的內容
+                renderTabContent(targetId);
+            }
+
+            buttons.forEach(button => {
+                button.addEventListener('click', () => switchTab(button.dataset.tab));
+            });
+
+            // 預設切換到第一個 Tab
+            switchTab('assets');
+        }
+
+        function renderTabContent(tabId) {
+            // 每次切換 Tab 都重新渲染，確保數據最新
+            switch (tabId) {
+                case 'assets':
+                    renderAssets();
+                    renderGoalTab();
+                    break;
+                case 'plan':
+                    renderFixedPlan(); // 已修改為渲染固定和流動支出
+                    renderCreditCardPrep(); // 新增：渲染信用卡預備金監控
+                    break;
+                case 'bookkeeping':
+                    renderBookkeepingFormOptions();
+                    initCategorySelects(); // 初始化分類選單
+                    renderTransactionHistory();
+                    renderMonthlyStats(); // 本月統計
+                    renderCurrentYearStats(); // 本年度統計
+                    initHistoricalStats(); // 歷年統計
+                    break;
+                case 'joint':
+                    renderJointAccount();
+                    break;
+                case 'goal':
+                    renderGoalTab();
+                    break;
+            }
+        }
+
+        // --- 新增功能: 取得信用卡結帳週期 ---
+        function getCardCycle(billingDay) {
+            const now = new Date();
+            const currentDay = now.getDate();
+            // 邏輯: 
+            // 如果今天日期 > 結帳日: 當期為 本月(結帳日+1) ~ 下月(結帳日)
+            // 如果今天日期 <= 結帳日: 當期為 上月(結帳日+1) ~ 本月(結帳日)
+            
+            let startDate, endDate;
+            
+            if (currentDay > billingDay) {
+                // 新的週期開始於本月
+                startDate = new Date(now.getFullYear(), now.getMonth(), billingDay + 1, 0, 0, 0);
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, billingDay, 23, 59, 59);
+            } else {
+                // 還在舊的週期 (本月結帳日前)
+                startDate = new Date(now.getFullYear(), now.getMonth() - 1, billingDay + 1, 0, 0, 0);
+                endDate = new Date(now.getFullYear(), now.getMonth(), billingDay, 23, 59, 59);
+            }
+            return { startDate, endDate };
+        }
+
+        // --- 新增功能: 信用卡預備金監控 (修正為依卡片週期計算) ---
+        function renderCreditCardPrep() {
+            const container = document.getElementById('credit-card-prep-list');
+            if(!container) return;
+            container.innerHTML = '';
+
+            // 1. 整理信用卡與對應帳戶
+            const accountMap = {}; 
+
+            CREDIT_CARDS.forEach(card => {
+                const linkedAccName = card.linkedAccount;
+                if (!accountMap[linkedAccName]) {
+                    // 找出資產中的對應帳戶資訊 (餘額等)
+                    const assetInfo = appData.assets.find(a => a.name === linkedAccName) || { name: linkedAccName, amount: 0, currency: 'TWD' };
+                    accountMap[linkedAccName] = {
+                        info: assetInfo,
+                        cards: [],
+                        totalCardExpense: 0
+                    };
+                }
+                
+                // 計算該張卡片的結算週期
+                const { startDate, endDate } = getCardCycle(card.billingDay);
+                
+                accountMap[linkedAccName].cards.push({
+                    ...card,
+                    cycleStart: startDate,
+                    cycleEnd: endDate,
+                    amount: 0 // 待計算
+                });
+            });
+
+            // 2. 計算各卡片在其特定週期內的支出
+            appData.transactions.forEach(t => {
+                if (t.type !== 'expense') return;
+                
+                const tDate = new Date(t.timestamp);
+                
+                // 檢查這筆交易屬於哪張卡片，且是否在其週期內
+                for (const accName in accountMap) {
+                    const group = accountMap[accName];
+                    const matchedCardData = group.cards.find(c => c.name === t.account);
+                    
+                    if (matchedCardData) {
+                        if (tDate >= matchedCardData.cycleStart && tDate <= matchedCardData.cycleEnd) {
+                            const amountTWD = convertToTWD(t.amount, t.currency);
+                            matchedCardData.amount += amountTWD;
+                            group.totalCardExpense += amountTWD;
+                        }
+                        break; 
+                    }
+                }
+            });
+
+            // 3. 渲染畫面
+            if (Object.keys(accountMap).length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center">尚無信用卡設定。</p>';
+                return;
+            }
+
+            for (const accName in accountMap) {
+                const group = accountMap[accName];
+                const accountBalance = convertToTWD(group.info.amount, group.info.currency);
+                const remaining = accountBalance - group.totalCardExpense;
+                const isDanger = remaining < 0;
+                
+                // 產生卡片詳細資訊 HTML
+                const cardDetailsHtml = group.cards.map(c => {
+                    const dateStr = `${c.cycleStart.getMonth()+1}/${c.cycleStart.getDate()}~${c.cycleEnd.getMonth()+1}/${c.cycleEnd.getDate()}`;
+                    return `<div class="flex justify-between text-xs text-gray-500 mt-1 pl-2 border-l-2 border-base">
+                        <span>${c.name} <span class="text-[10px] bg-gray-100 rounded px-1">${dateStr}</span></span>
+                        <span>$${formatCurrency(c.amount, 'TWD')}</span>
+                    </div>`;
+                }).join('');
+
+                const html = `
+                    <div class="bg-secondary/30 p-3 rounded-lg border border-base/50">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <p class="font-bold text-primary">${accName}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs text-gray-500">帳戶餘額</p>
+                                <p class="font-medium text-primary">${formatCurrency(accountBalance, 'TWD')}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-1 mb-2">
+                            ${cardDetailsHtml}
+                        </div>
+                        
+                        <div class="flex justify-between items-center text-sm border-t border-gray-200 pt-2 mt-1">
+                            <span class="text-gray-600 font-medium">總預計扣款</span>
+                            <span class="font-bold text-red-600">-${formatCurrency(group.totalCardExpense, 'TWD')}</span>
+                        </div>
+                        
+                        <div class="flex justify-between items-center text-sm mt-1">
+                            <span class="text-gray-600">預估剩餘</span>
+                            <span class="font-bold ${isDanger ? 'text-red-600' : 'text-green-600'}">
+                                ${formatCurrency(remaining, 'TWD')}
+                                ${isDanger ? '<i class="fas fa-exclamation-circle ml-1"></i>' : ''}
+                            </span>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += html;
+            }
+        }
+
+        // --- Tab 1: 資產分配 (已修改渲染邏輯以預設展開特定分類) ---
+
+        function renderAssets() {
+            const container = document.getElementById('asset-accordion');
+            // calculateTotalAsset 只計算個人資產
+            const totalTWD = calculateTotalAsset(); 
+            
+            document.getElementById('total-asset-twd').textContent = `TWD ${formatCurrency(totalTWD, 'TWD')}`;
+            document.getElementById('exchange-rate-display').textContent = `匯率更新：USD=${appData.exchangeRates.USD}, CNY=${appData.exchangeRates.CNY}`;
+
+            container.innerHTML = '';
+            
+            // 按照類別分組 (只使用 appData.assets)
+            const groupedAssets = appData.assets.reduce((acc, asset) => {
+                acc[asset.category] = acc[asset.category] || [];
+                acc[asset.category].push(asset);
+                return acc;
+            }, {});
+            
+            // 渲染個人資產明細
+            Object.entries(groupedAssets).forEach(([category, assets]) => {
+                const categoryTotalTWD = assets.reduce((sum, a) => sum + convertToTWD(a.amount, a.currency), 0);
+                const categoryId = `accordion-${category.replace(/\s/g, '-')}`;
+
+                // 檢查是否應該預設開啟
+                const isOpen = DEFAULT_OPEN_CATEGORIES.includes(categoryId);
+                const contentClass = isOpen ? '' : 'hidden';
+                const iconClass = isOpen ? 'rotate-180' : '';
+
+                const categoryHeader = `
+                    <div class="bg-white rounded-xl shadow-md border border-base">
+                        <button class="w-full flex justify-between items-center p-4 font-semibold text-lg text-primary" onclick="toggleAccordion('${categoryId}')">
+                            <span>${category} (${assets.length})</span>
+                            <div class="text-right">
+                                <span class="text-sm font-bold text-accent">TWD ${formatCurrency(categoryTotalTWD, 'TWD')}</span>
+                                <i class="fas fa-chevron-down text-sm ml-3 transition-transform duration-300 transform ${iconClass}" id="${categoryId}-icon"></i>
+                            </div>
+                        </button>
+                        <div id="${categoryId}" class="${contentClass}">
+                            ${assets.map(asset => `
+                                <div class="flex justify-between items-center p-3 border-t border-base/50 text-sm hover:bg-secondary/50">
+                                    <span class="ml-4">${asset.name}</span>
+                                    <span class="font-medium">
+                                        ${formatCurrency(asset.amount, asset.currency)} <span class="text-xs text-gray-500">${asset.currency}</span>
+                                    </span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += categoryHeader;
+            });
+            
+        }
+        
+        // --- Tab 2: 每月理財規劃 ---
+
+        // 更新收入 (綁定到 input onchange)
+        function updateMonthlyIncome(newVal) {
+            const val = parseFloat(newVal);
+            if (!isNaN(val) && val >= 0) {
+                appData.monthlyIncome = val;
+                saveData(); // 儲存到 LocalStorage
+                renderFixedPlan(); // 重新渲染以更新介面
+            }
+        }
+
+        // 更新固定支出金額 (綁定到 input onchange)
+        function updateFixedExpense(index, newVal) {
+            const val = parseFloat(newVal);
+            if (!isNaN(val) && val >= 0) {
+                appData.fixedExpenses[index].amount = val;
+                saveData();
+                renderFixedPlan();
+            }
+        }
+
+        function renderFixedPlan() {
+            const fixedContainer = document.getElementById('fixed-expenses-list');
+            const fluidContainer = document.getElementById('fluid-expenses-list');
+            fixedContainer.innerHTML = '';
+            fluidContainer.innerHTML = '';
+
+            // 更新收入輸入框的值 (若尚未渲染)
+            const incomeInput = document.getElementById('monthly-income-input');
+            if (incomeInput && incomeInput.value != appData.monthlyIncome) {
+                incomeInput.value = appData.monthlyIncome;
+            }
+
+            let totalFixedExpenseTWD = 0;
+            
+            // 1. 渲染每月固定支出 (使用 appData.fixedExpenses，包含 input)
+            appData.fixedExpenses.forEach((exp, index) => {
+                const expenseTWD = convertToTWD(exp.amount, exp.currency);
+                totalFixedExpenseTWD += expenseTWD;
+                
+                fixedContainer.innerHTML += `
+                    <div class="flex justify-between items-center p-2 border-b last:border-b-0 border-base/50 text-base">
+                        <span class="font-medium">${exp.name}</span>
+                        <div class="flex items-center">
+                            <span class="text-xs text-gray-500 mr-2">${exp.currency}</span>
+                            <input type="number" 
+                                   class="font-bold text-red-600 w-20 bg-transparent border-b border-dashed border-red-200 focus:outline-none focus:border-red-600 text-right"
+                                   value="${exp.amount}"
+                                   onchange="updateFixedExpense(${index}, this.value)">
+                        </div>
+                    </div>
+                `;
+            });
+            
+            // 2. 渲染每月流動支出 (條列式)
+            FLUID_EXPENSES.forEach(exp => {
+                let extraHtml = '';
+                
+                // --- 零用金連動信用卡費邏輯 ---
+                if (exp.name === '零用金') {
+                    // 計算本月 (依理財月) 的所有信用卡消費總額
+                    const { startDate, endDate } = getCurrentFinancialMonthRange();
+                    let currentMonthCardSpending = 0;
+
+                    appData.transactions.forEach(t => {
+                        if (t.type === 'expense') {
+                            const tDate = new Date(t.timestamp);
+                            if (tDate >= startDate && tDate <= endDate) {
+                                // 檢查是否為信用卡消費 (帳戶名稱在 CREDIT_CARDS 列表中)
+                                const isCard = CREDIT_CARDS.some(c => c.name === t.account);
+                                if (isCard) {
+                                    currentMonthCardSpending += convertToTWD(t.amount, t.currency);
+                                }
+                            }
+                        }
+                    });
+
+                    const budget = convertToTWD(exp.amount, exp.currency);
+                    const remaining = budget - currentMonthCardSpending;
+                    const isOver = remaining < 0;
+                    
+                    extraHtml = `
+                        <div class="w-full text-xs mt-1 bg-gray-50 p-2 rounded">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-gray-500">本月已刷卡</span>
+                                <span class="font-bold text-red-500">-${formatCurrency(currentMonthCardSpending, 'TWD')}</span>
+                            </div>
+                            <div class="flex justify-between border-t border-gray-200 pt-1">
+                                <span class="text-gray-500">剩餘額度</span>
+                                <span class="font-bold ${isOver ? 'text-red-600' : 'text-green-600'}">
+                                    ${formatCurrency(remaining, 'TWD')}
+                                    ${isOver ? '(超支!)' : ''}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                }
+                // ---------------------------
+
+                fluidContainer.innerHTML += `
+                    <div class="flex flex-col p-2 border-b last:border-b-0 border-base/50 text-base">
+                        <div class="flex justify-between items-center w-full">
+                            <span class="font-medium">${exp.name}</span>
+                            <span class="font-bold text-green-600">
+                                ${formatCurrency(exp.amount, exp.currency)} <span class="text-xs text-gray-500">${exp.currency}</span>
+                            </span>
+                        </div>
+                        ${extraHtml}
+                    </div>
+                `;
+            });
+
+            // 3. 更新總固定支出金額
+            document.getElementById('total-fixed-expense').textContent = `TWD ${formatCurrency(totalFixedExpenseTWD, 'TWD')}`;
+        }
+
+        // --- Tab 3: 記帳 ---
+
+        function renderBookkeepingFormOptions() {
+            const select = document.getElementById('transaction-account');
+            select.innerHTML = '<option value="" disabled selected>選擇帳戶/卡片</option>';
+            
+            // 使用 optgroup 將帳戶和信用卡分開
+            
+            // Group 1: 帳戶
+            const groupAccounts = document.createElement('optgroup');
+            groupAccounts.label = "帳戶";
+            const allAccounts = [...appData.assets, appData.jointAccount];
+            allAccounts.forEach(asset => {
+                const option = document.createElement('option');
+                option.value = asset.name;
+                option.textContent = `${asset.name} (${asset.currency})`;
+                groupAccounts.appendChild(option);
+            });
+            select.appendChild(groupAccounts);
+
+            // Group 2: 信用卡 (新增)
+            const groupCards = document.createElement('optgroup');
+            groupCards.label = "信用卡";
+            CREDIT_CARDS.forEach(card => {
+                const option = document.createElement('option');
+                option.value = card.name;
+                option.textContent = `${card.name} (${card.currency})`;
+                groupCards.appendChild(option);
+            });
+            select.appendChild(groupCards);
+        }
+
+        // 初始化分類選單邏輯
+        function initCategorySelects() {
+            const typeSelect = document.getElementById('transaction-type');
+            const categorySelect = document.getElementById('transaction-category');
+            const subcategorySelect = document.getElementById('transaction-subcategory');
+            
+            // 綁定「收支類型」變更事件
+            typeSelect.onchange = function() {
+                updateCategoryOptions();
+            };
+
+            // 綁定「主分類」變更事件
+            categorySelect.onchange = function() {
+                const type = typeSelect.value;
+                const selectedCategory = this.value;
+                
+                if (type === 'transfer') {
+                     return;
+                }
+                
+                subcategorySelect.innerHTML = '<option value="" disabled selected>細項</option>';
+                
+                if (type === 'expense') {
+                     const subItems = EXPENSE_CATEGORIES[selectedCategory] || [];
+                     subItems.forEach(item => {
+                        const option = document.createElement('option');
+                        option.value = item;
+                        option.textContent = item;
+                        subcategorySelect.appendChild(option);
+                    });
+                    subcategorySelect.disabled = false;
+                    subcategorySelect.classList.remove('bg-gray-100', 'text-gray-400');
+                    subcategorySelect.classList.add('bg-white');
+                } else {
+                    // 收入模式下，主分類改變不需要更新細項
+                }
+            };
+
+            // 初始化第一次
+            updateCategoryOptions();
+        }
+
+        // 根據收支類型更新主分類選單
+        function updateCategoryOptions() {
+            const typeSelect = document.getElementById('transaction-type');
+            const categorySelect = document.getElementById('transaction-category');
+            const subcategorySelect = document.getElementById('transaction-subcategory');
+            const rowAccountSelection = document.getElementById('row-account-selection');
+            const accountSelect = document.getElementById('transaction-account'); // 獲取帳戶選單元素
+            
+            const type = typeSelect.value;
+            categorySelect.innerHTML = ''; // 清空
+            subcategorySelect.innerHTML = ''; // 清空
+
+            if (type === 'expense') {
+                categorySelect.appendChild(new Option("分類", "", true, true));
+                categorySelect.options[0].disabled = true;
+                subcategorySelect.appendChild(new Option("細項", "", true, true));
+                subcategorySelect.options[0].disabled = true;
+
+                Object.keys(EXPENSE_CATEGORIES).forEach(category => {
+                    categorySelect.appendChild(new Option(category, category));
+                });
+                subcategorySelect.disabled = false;
+                subcategorySelect.classList.remove('bg-gray-100', 'text-gray-400');
+                subcategorySelect.classList.add('bg-white');
+                rowAccountSelection.classList.remove('hidden');
+                accountSelect.required = true;
+
+            } else if (type === 'income') {
+                categorySelect.appendChild(new Option("分類", "", true, true));
+                categorySelect.options[0].disabled = true;
+                subcategorySelect.appendChild(new Option("-", "-", true, true));
+                
+                INCOME_CATEGORIES_LIST.forEach(category => {
+                    categorySelect.appendChild(new Option(category, category));
+                });
+                
+                subcategorySelect.disabled = true;
+                subcategorySelect.classList.remove('bg-white');
+                subcategorySelect.classList.add('bg-gray-100', 'text-gray-400');
+                rowAccountSelection.classList.remove('hidden');
+                accountSelect.required = true;
+
+            } else if (type === 'transfer') {
+                categorySelect.appendChild(new Option("轉出帳號", "", true, true));
+                categorySelect.options[0].disabled = true;
+                
+                subcategorySelect.appendChild(new Option("轉入帳號", "", true, true));
+                subcategorySelect.options[0].disabled = true;
+
+                const allAccounts = [...appData.assets, appData.jointAccount];
+                allAccounts.forEach(asset => {
+                    const displayText = `${asset.name} (${asset.currency})`;
+                    categorySelect.appendChild(new Option(displayText, asset.name));
+                    subcategorySelect.appendChild(new Option(displayText, asset.name));
+                });
+
+                subcategorySelect.disabled = false;
+                subcategorySelect.classList.remove('bg-gray-100', 'text-gray-400');
+                subcategorySelect.classList.add('bg-white');
+                rowAccountSelection.classList.add('hidden');
+                accountSelect.required = false;
+            }
+        }
+        
+        // --- 遺失的函數補回 (重要！) ---
+
+        // 新增：取得當天日期字串 (YYYY-MM-DD)
+        function getTodayDateString() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        // 新增：設定記帳日期預設值為今天
+        function setTransactionDateDefault() {
+            const dateInput = document.getElementById('transaction-date');
+            if (dateInput) {
+                dateInput.value = getTodayDateString();
+            }
+        }
+
+        // 記帳表單提交處理 (確保有監聽)
+        const transactionForm = document.getElementById('transaction-form');
+        if (transactionForm) {
+            transactionForm.addEventListener('submit', handleTransactionSubmit);
+        }
+        
+        function handleTransactionSubmit(e) {
+            e.preventDefault();
+            
+            const form = e.target;
+            const dateStr = document.getElementById('transaction-date').value;
+            const type = document.getElementById('transaction-type').value; 
+            const category = document.getElementById('transaction-category').value; 
+            const subcategory = document.getElementById('transaction-subcategory').value; 
+            
+            const amount = parseFloat(form.elements['transaction-amount'].value);
+            const currency = form.elements['transaction-currency'].value;
+            const accountName = form.elements['transaction-account'].value;
+            const note = document.getElementById('transaction-note').value;
+            
+            // 驗證
+            if (!dateStr) {
+                showAlert('warning', '請選擇日期。');
+                return;
+            }
+
+            if (isNaN(amount) || amount <= 0) {
+                 showAlert('warning', '請輸入有效的金額。');
+                 return;
+            }
+
+            if (category === "" && type !== 'income') {
+                 showAlert('warning', '請選擇分類/轉出帳號。');
+                 return;
+            }
+
+            if (type === 'expense' && subcategory === "") {
+                showAlert('warning', '支出請選擇細項。');
+                return;
+            }
+
+            if (type === 'transfer') {
+                if (category === subcategory) {
+                    showAlert('warning', '轉出與轉入帳號不能相同。');
+                    return;
+                }
+                if (subcategory === "") {
+                    showAlert('warning', '請選擇轉入帳號。');
+                    return;
+                }
+            }
+
+            if (type !== 'transfer' && accountName === "") {
+                showAlert('warning', '請選擇帳戶/卡片。');
+                return;
+            }
+            
+            let name = "";
+            let finalAccount = "";
+            let toAccount = null;
+
+            if (type === 'expense') {
+                name = `${category}-${subcategory}`;
+                finalAccount = accountName;
+            } else if (type === 'income') {
+                name = category; 
+                finalAccount = accountName;
+            } else if (type === 'transfer') {
+                name = "轉帳"; 
+                finalAccount = category; 
+                toAccount = subcategory; 
+            }
+
+            if (type === 'transfer') {
+                const sourceAcc = getAccountByName(finalAccount);
+                const destAcc = getAccountByName(toAccount);
+                if (!sourceAcc || !destAcc) {
+                    showAlert('danger', '選擇的轉帳帳戶無效。');
+                    return;
+                }
+            } else {
+                 const account = getAccountByName(finalAccount);
+                 if (!account) {
+                    showAlert('danger', '選擇的帳戶不存在。');
+                    return;
+                }
+            }
+
+            // 計算時間戳記 (將選定日期設為中午 12:00:00，避免時區問題)
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const timestampDate = new Date(y, m - 1, d, 12, 0, 0); 
+            const finalTimestamp = timestampDate.getTime();
+
+            saveNewTransaction(name, amount, currency, type, finalAccount, toAccount, note, finalTimestamp);
+            form.reset();
+            setTransactionDateDefault();
+            
+            if(type === 'transfer') {
+                document.getElementById('transaction-type').value = 'expense';
+            }
+            updateCategoryOptions(); 
+        }
+        
+        function saveNewTransaction(name, amount, currency, type, accountName, toAccount, note, timestamp) {
+            const newTransaction = {
+                id: Date.now().toString(),
+                name,
+                amount: parseFloat(amount),
+                currency,
+                type, 
+                account: accountName,
+                toAccount: toAccount, 
+                timestamp: timestamp || Date.now(),
+                note: note || '' 
+            };
+
+            appData.transactions.push(newTransaction);
+            applyTransactionsToAssets();
+            saveData();
+            
+            let msg = "";
+            if (type === 'transfer') {
+                 msg = `已記錄轉帳：${amount} ${currency} 從 ${accountName} 到 ${toAccount}`;
+            } else {
+                 msg = `已記錄 ${name} ${type === 'expense' ? '支出' : '收入'}！`;
+            }
+
+            showAlert('success', msg);
+            renderTransactionHistory();
+            renderAssets(); 
+            renderJointAccount(); 
+            renderGoalTab(); 
+            renderMonthlyStats(); 
+            renderCurrentYearStats();
+            initHistoricalStats(); 
+            
+            renderCreditCardPrep();
+            renderFixedPlan(); 
+        }
+
+        function renderTransactionHistory() {
+            const historyList = document.getElementById('transaction-history');
+            const loadMoreBtn = document.getElementById('load-more-container');
+            
+            // Clear list
+            historyList.innerHTML = '';
+
+            if (appData.transactions.length === 0) {
+                historyList.innerHTML = '<li class="text-center text-gray-500 p-4 rounded-xl">尚無記帳歷史記錄。</li>';
+                loadMoreBtn.classList.add('hidden');
+                return;
+            }
+
+            // 排序：最新的在最前面
+            const sortedTransactions = [...appData.transactions].sort((a, b) => b.timestamp - a.timestamp);
+            
+            // 判斷顯示數量
+            const displayLimit = showFullHistory ? sortedTransactions.length : 10;
+            const transactionsToShow = sortedTransactions.slice(0, displayLimit);
+
+            // 渲染列表 (一次性生成 HTML 以優化效能並確保事件綁定穩定)
+            historyList.innerHTML = transactionsToShow.map(t => {
+                let color, sign, icon, displayAccount;
+
+                if (t.type === 'expense') {
+                    color = 'text-red-600';
+                    sign = '-';
+                    icon = 'fa-arrow-circle-down';
+                    displayAccount = t.account;
+                } else if (t.type === 'income') {
+                    color = 'text-green-600';
+                    sign = '+';
+                    icon = 'fa-arrow-circle-up';
+                    displayAccount = t.account;
+                } else if (t.type === 'transfer') {
+                    color = 'text-blue-600'; // 轉帳用藍色
+                    sign = ''; // 轉帳通常不顯示正負號
+                    icon = 'fa-exchange-alt';
+                    displayAccount = `${t.account} <i class="fas fa-arrow-right text-xs mx-1"></i> ${t.toAccount}`;
+                }
+
+                const dateStr = new Date(t.timestamp).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
+                // 備註顯示邏輯
+                const noteHtml = t.note ? `<p class="text-xs text-gray-400 mt-0.5 truncate"><i class="fas fa-sticky-note mr-1"></i>${t.note}</p>` : '';
+
+                return `
+                    <li class="bg-secondary/20 p-3 rounded-lg flex justify-between items-center border border-transparent hover:border-base transition">
+                        <div class="flex items-center min-w-0 flex-1">
+                            <i class="fas ${icon} text-lg ${color} mr-3"></i>
+                            <div class="min-w-0 flex-1">
+                                <p class="font-medium truncate text-primary text-sm">${t.name}</p>
+                                <p class="text-xs text-gray-500 mt-0.5 truncate">
+                                    ${displayAccount}
+                                </p>
+                                ${noteHtml}
+                            </div>
+                        </div>
+                        <div class="text-right ml-2 flex flex-col items-end">
+                            <p class="font-bold text-base ${color}">
+                                <span class="text-xs text-gray-400 mr-1 font-normal">${dateStr}</span>${sign}${formatCurrency(t.amount, t.currency)}
+                            </p>
+                            <div class="mt-1 flex space-x-2">
+                                <button onclick="event.stopPropagation(); openDeleteModal('${t.id}')" class="text-gray-400 hover:text-red-500 transition px-2" title="刪除">
+                                    <i class="fas fa-trash-alt text-xs"></i>
+                                </button>
+                                <button onclick="openEditModal('${t.id}')" class="text-gray-400 hover:text-accent transition px-2" title="修改">
+                                    <i class="fas fa-edit text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+            
+            // 處理「查看更多」按鈕的顯示
+            if (sortedTransactions.length > 10 && !showFullHistory) {
+                loadMoreBtn.classList.remove('hidden');
+            } else {
+                loadMoreBtn.classList.add('hidden');
+            }
+        }
+
+        function loadMoreTransactions() {
+            showFullHistory = true;
+            renderTransactionHistory();
+        }
+
+        // --- 編輯功能邏輯 ---
+        function openEditModal(id) {
+            const t = appData.transactions.find(item => item.id === id);
+            if (!t) return;
+
+            document.getElementById('edit-id').value = t.id;
+            document.getElementById('edit-amount').value = t.amount;
+            document.getElementById('edit-note').value = t.note || ''; // 載入備註
+            
+            const date = new Date(t.timestamp);
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            document.getElementById('edit-date').value = `${yyyy}-${mm}-${dd}`;
+
+            const modal = document.getElementById('edit-modal');
+            modal.classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.add('hidden');
+        }
+
+        document.getElementById('edit-transaction-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-id').value;
+            const newAmount = parseFloat(document.getElementById('edit-amount').value);
+            const newDateStr = document.getElementById('edit-date').value;
+            const newNote = document.getElementById('edit-note').value;
+
+            if (isNaN(newAmount) || newAmount < 0 || !newDateStr) {
+                showAlert('warning', '請輸入有效的金額與日期。');
+                return;
+            }
+
+            const tIndex = appData.transactions.findIndex(item => item.id === id);
+            if (tIndex > -1) {
+                appData.transactions[tIndex].amount = newAmount;
+                appData.transactions[tIndex].note = newNote; // 更新備註
+                const newDate = new Date(newDateStr);
+                newDate.setHours(12, 0, 0, 0);
+                appData.transactions[tIndex].timestamp = newDate.getTime();
+
+                applyTransactionsToAssets();
+                saveData();
+                renderTransactionHistory();
+                renderAssets();
+                renderJointAccount();
+                renderGoalTab();
+                renderMonthlyStats(); 
+                renderCurrentYearStats(); // Update yearly
+                
+                // --- 修復開始：修改日期後重新初始化歷年選單 ---
+                const historySelect = document.getElementById('history-year-select');
+                const currentSelectedYear = historySelect.value; // 記錄當前選中的年份
+
+                initHistoricalStats(); // 重新生成年份選項 (包含新加入的年份如 2026)
+
+                // 嘗試恢復原本選中的年份視圖
+                if (currentSelectedYear) {
+                    historySelect.value = currentSelectedYear;
+                    // 檢查該年份是否還存在 (如果該年份的最後一筆交易被移走了，選單值會是空)
+                    if (historySelect.value === currentSelectedYear) {
+                        renderHistoricalStats(currentSelectedYear);
+                    } else {
+                        document.getElementById('history-year-stats-container').innerHTML = '<p class="text-center text-gray-500 py-4">請選擇年度以查看統計</p>';
+                    }
+                }
+                // --- 修復結束 ---
+                
+                // 更新信用卡監控
+                renderCreditCardPrep();
+                renderFixedPlan(); // 更新零用金
+
+                closeEditModal();
+                showAlert('success', '紀錄修改成功！');
+            }
+        });
+        
+        // --- 刪除確認視窗邏輯 ---
+        function openDeleteModal(id) {
+            transactionToDeleteId = id;
+            document.getElementById('delete-modal').classList.remove('hidden');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.add('hidden');
+            transactionToDeleteId = null;
+        }
+
+        function confirmDelete() {
+            if (transactionToDeleteId) {
+                const index = appData.transactions.findIndex(t => t.id === transactionToDeleteId);
+                
+                if (index > -1) {
+                    appData.transactions.splice(index, 1);
+                    applyTransactionsToAssets();
+                    saveData();
+                    showAlert('info', '記帳記錄已刪除。');
+                    
+                    // 重新渲染所有相關介面
+                    renderTransactionHistory();
+                    renderAssets();
+                    renderJointAccount();
+                    renderGoalTab();
+                    renderMonthlyStats(); 
+                    renderCurrentYearStats();
+                    
+                    const historySelect = document.getElementById('history-year-select');
+                    if(historySelect.value) renderHistoricalStats(historySelect.value);
+                    
+                    renderCreditCardPrep();
+                    renderFixedPlan();
+                }
+                closeDeleteModal();
+            }
+        }
+
+        // --- 統計邏輯 ---
+
+        function renderMonthlyStats() {
+            const container = document.getElementById('monthly-stats-list');
+            const totalExpenseEl = document.getElementById('stats-total-expense');
+            const totalIncomeEl = document.getElementById('stats-total-income');
+            const rangeEl = document.getElementById('stats-date-range');
+            
+            const { startDate, endDate } = getCurrentFinancialMonthRange();
+            
+            const formatD = d => `${d.getMonth()+1}/${d.getDate()}`;
+            rangeEl.textContent = `統計區間: ${formatD(startDate)} ~ ${formatD(endDate)}`;
+
+            // 篩選區間內的交易 (排除轉帳)
+            const currentPeriodTransactions = appData.transactions.filter(t => {
+                const tDate = new Date(t.timestamp);
+                return tDate >= startDate && tDate <= endDate && t.type !== 'transfer';
+            });
+
+            // 統計總額
+            let totalExpenseTWD = 0;
+            let totalIncomeTWD = 0;
+            const accountStats = {};
+
+            currentPeriodTransactions.forEach(t => {
+                const amountTWD = convertToTWD(t.amount, t.currency);
+                
+                if (t.type === 'expense') {
+                    totalExpenseTWD += amountTWD;
+                    // 分類統計僅針對支出
+                    if (!accountStats[t.account]) {
+                        accountStats[t.account] = 0;
+                    }
+                    accountStats[t.account] += amountTWD;
+                } else if (t.type === 'income') {
+                    totalIncomeTWD += amountTWD;
+                }
+            });
+
+            totalExpenseEl.textContent = `TWD ${formatCurrency(totalExpenseTWD, 'TWD')}`;
+            totalIncomeEl.textContent = `TWD ${formatCurrency(totalIncomeTWD, 'TWD')}`;
+            
+            container.innerHTML = '';
+
+            if (Object.keys(accountStats).length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 text-sm py-2">本週期尚無支出紀錄。</p>';
+                return;
+            }
+
+            // 顯示支出分類佔比
+            const sortedStats = Object.entries(accountStats).sort((a, b) => b[1] - a[1]);
+
+            sortedStats.forEach(([name, amount]) => {
+                const percent = totalExpenseTWD > 0 ? ((amount / totalExpenseTWD) * 100).toFixed(1) : 0;
+                const isCredit = CREDIT_CARDS.some(c => c.name === name);
+                const iconClass = isCredit ? 'fa-credit-card text-blue-500' : 'fa-wallet text-amber-600';
+
+                const html = `
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center space-x-2 w-1/2">
+                            <i class="fas ${iconClass} w-5 text-center"></i>
+                            <span class="truncate text-primary font-medium" title="${name}">${name}</span>
+                        </div>
+                        <div class="text-right w-1/2">
+                            <span class="font-bold text-gray-700">TWD ${formatCurrency(amount, 'TWD')}</span>
+                            <span class="text-xs text-gray-400 ml-1">(${percent}%)</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-gray-100 rounded-full h-1.5 mt-1">
+                        <div class="bg-primary h-1.5 rounded-full opacity-60" style="width: ${percent}%"></div>
+                    </div>
+                `;
+                container.innerHTML += html;
+            });
+        }
+
+        // 2. 年度統計 Helper (依自然月)
+        function getMonthlyStatsForYear(year) {
+            const monthlyData = Array(12).fill(null).map(() => ({ income: 0, expense: 0 }));
+            
+            appData.transactions.forEach(t => {
+                if (t.type === 'transfer') return; // 排除轉帳
+
+                const date = new Date(t.timestamp);
+                if (date.getFullYear() === parseInt(year)) {
+                    const monthIndex = date.getMonth(); // 0-11
+                    const amountTWD = convertToTWD(t.amount, t.currency);
+                    
+                    if (t.type === 'income') {
+                        monthlyData[monthIndex].income += amountTWD;
+                    } else if (t.type === 'expense') {
+                        monthlyData[monthIndex].expense += amountTWD;
+                    }
+                }
+            });
+            return monthlyData;
+        }
+
+        // 3. 渲染本年度統計
+        function renderCurrentYearStats() {
+            const currentYear = new Date().getFullYear();
+            const container = document.getElementById('yearly-stats-container');
+            const data = getMonthlyStatsForYear(currentYear);
+            
+            container.innerHTML = '';
+            
+            let hasData = false;
+            
+            // 倒序顯示 (12月 -> 1月) 或者 正序 (1月 -> 12月)
+            data.forEach((monthData, index) => {
+                const income = monthData.income;
+                const expense = monthData.expense;
+                const net = income - expense;
+                const hasActivity = income > 0 || expense > 0;
+                
+                if (hasActivity) hasData = true;
+
+                const opacityClass = hasActivity ? 'opacity-100' : 'opacity-40';
+                
+                const html = `
+                    <div class="flex justify-between items-center text-sm border-b border-gray-100 pb-2 ${opacityClass}">
+                        <div class="w-12 font-bold text-gray-500">${index + 1}月</div>
+                        <div class="flex-1 px-2">
+                             <div class="flex justify-between text-xs mb-1">
+                                <span class="text-green-600">收入 ${formatCurrency(income, 'TWD')}</span>
+                                <span class="text-red-600">支出 ${formatCurrency(expense, 'TWD')}</span>
+                             </div>
+                             <div class="h-1.5 w-full bg-gray-100 rounded-full flex overflow-hidden">
+                                <div class="bg-green-500 h-full" style="width: ${income > 0 ? '50%' : '0%'}"></div>
+                                <div class="bg-red-500 h-full" style="width: ${expense > 0 ? '50%' : '0%'}"></div>
+                             </div>
+                        </div>
+                        <div class="w-20 text-right font-bold ${net >= 0 ? 'text-primary' : 'text-red-600'}">
+                            ${net >= 0 ? '+' : ''}${formatCurrency(net, 'TWD')}
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += html;
+            });
+            
+            if(!hasData) {
+                container.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">本年度尚無紀錄</p>';
+            }
+        }
+
+        // 4. 歷年統計
+        function initHistoricalStats() {
+            const select = document.getElementById('history-year-select');
+            // 找出所有交易的年份
+            const years = new Set();
+            appData.transactions.forEach(t => {
+                const y = new Date(t.timestamp).getFullYear();
+                years.add(y);
+            });
+            
+            // 加上今年 (確保選單至少有今年)
+            years.add(new Date().getFullYear());
+            
+            // 排序 (大到小)
+            const sortedYears = Array.from(years).sort((a, b) => b - a);
+            
+            select.innerHTML = '<option value="" disabled selected>請選擇</option>';
+            sortedYears.forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = `${year}年`;
+                select.appendChild(option);
+            });
+            
+            select.onchange = function() {
+                renderHistoricalStats(this.value);
+            };
+        }
+
+        function renderHistoricalStats(year) {
+            const container = document.getElementById('history-year-stats-container');
+            const data = getMonthlyStatsForYear(year);
+            
+            container.innerHTML = '';
+            let hasData = false;
+
+            data.forEach((monthData, index) => {
+                const income = monthData.income;
+                const expense = monthData.expense;
+                const net = income - expense;
+                const hasActivity = income > 0 || expense > 0;
+                
+                if (hasActivity) hasData = true;
+                
+                if (hasActivity) {
+                    const html = `
+                        <div class="flex justify-between items-center text-sm border-b border-gray-100 pb-2">
+                            <div class="w-12 font-bold text-gray-500">${index + 1}月</div>
+                            <div class="flex-1 px-4 text-center">
+                                <span class="block text-green-600 text-xs">收 ${formatCurrency(income, 'TWD')}</span>
+                                <span class="block text-red-600 text-xs">支 ${formatCurrency(expense, 'TWD')}</span>
+                            </div>
+                            <div class="w-20 text-right font-bold ${net >= 0 ? 'text-primary' : 'text-red-600'}">
+                                ${net >= 0 ? '結餘 +' : ''}${formatCurrency(net, 'TWD')}
+                            </div>
+                        </div>
+                    `;
+                    container.innerHTML += html;
+                }
+            });
+
+            if(!hasData) {
+                container.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">該年度無紀錄</p>';
+            }
+        }
+
+        // --- Tab 5: 百萬目標追蹤 (Goal) ---
+
+        function renderGoalTab() {
+            const totalAssetTWD = calculateTotalAsset(); 
+            const difference = GOAL_AMOUNT - totalAssetTWD;
+            const progressPercent = Math.min(100, (totalAssetTWD / GOAL_AMOUNT) * 100);
+            
+            const goalStatusEl = document.getElementById('goal-status');
+            const progressBar = document.getElementById('goal-progress-bar');
+            const percentDisplay = document.getElementById('goal-percent-display');
+
+            progressBar.style.width = `${progressPercent}%`;
+            percentDisplay.textContent = `${progressPercent.toFixed(2)}%`;
+
+            let statusHtml = '';
+
+            if (difference > 0) {
+                statusHtml = `
+                    <p class="text-xl text-primary font-medium mt-4">距離百萬目標</p>
+                    <p class="text-3xl font-bold text-red-700 my-2 tracking-wider">TWD ${formatCurrency(difference, 'TWD')}</p>
+                    <p class="text-sm text-gray-600">加油！持續增加資產累積。</p>
+                `;
+            } else {
+                 statusHtml = `
+                    <p class="text-xl text-primary font-medium mt-4">恭喜您！已達成目標！</p>
+                    <p class="text-3xl font-bold text-green-700 my-2 tracking-wider">超額達成 ${formatCurrency(Math.abs(difference), 'TWD')}</p>
+                    <p class="text-sm text-gray-600">繼續保持，設定下一個里程碑！</p>
+                `;
+            }
+            goalStatusEl.innerHTML = statusHtml;
+        }
+
+        // 1. 本月統計 (依理財月) - Helper Function
+        function getCurrentFinancialMonthRange() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth(); 
+            const day = now.getDate();
+
+            let startDate, endDate;
+            if (day >= 5) {
+                startDate = new Date(year, month, 5, 0, 0, 0);
+                endDate = new Date(year, month + 1, 4, 23, 59, 59);
+            } else {
+                startDate = new Date(year, month - 1, 5, 0, 0, 0);
+                endDate = new Date(year, month, 4, 23, 59, 59);
+            }
+            return { startDate, endDate };
+        }
+
+        // --- Tab 4: 共同帳戶 (Revised) ---
+
+        function renderJointAccount() {
+            // 1. Update Total Asset Display
+            const jointAmount = appData.jointAccount.amount;
+            document.getElementById('joint-asset-twd').textContent = `TWD ${formatCurrency(jointAmount, 'TWD')}`;
+
+            // 2. Calculate Monthly Stats (Financial Month for Top Section)
+            const { startDate, endDate } = getCurrentFinancialMonthRange(); // Reuse existing function
+            const formatD = d => `${d.getMonth()+1}/${d.getDate()}`;
+            
+            // Filter transactions for this period
+            const periodTrans = appData.transactions.filter(t => {
+                const tDate = new Date(t.timestamp);
+                return tDate >= startDate && tDate <= endDate;
+            });
+
+            // A. User Contribution (Transfer: My Account -> Joint Account)
+            // Logic: type=transfer AND toAccount='共同帳戶'
+            const userContribution = periodTrans
+                .filter(t => t.type === 'transfer' && t.toAccount === '共同帳戶')
+                .reduce((sum, t) => sum + convertToTWD(t.amount, t.currency), 0);
+
+            // B. Partner Contribution (Income -> Joint Account)
+            // Logic: type=income AND account='共同帳戶'
+            const partnerContribution = periodTrans
+                .filter(t => t.type === 'income' && t.account === '共同帳戶')
+                .reduce((sum, t) => sum + convertToTWD(t.amount, t.currency), 0);
+
+            // C. Joint Expenses (Expense from Joint Account)
+            const jointExpenses = periodTrans
+                .filter(t => t.type === 'expense' && t.account === '共同帳戶');
+            
+            const totalJointExpense = jointExpenses
+                .reduce((sum, t) => sum + convertToTWD(t.amount, t.currency), 0);
+
+            // 3. Render HTML (Top Section)
+            const placeholder = document.getElementById('joint-expenses-placeholder');
+            
+            let html = `
+                <p class="text-sm text-gray-500 text-right mb-2">統計區間: ${formatD(startDate)} ~ ${formatD(endDate)}</p>
+                
+                <!-- Contribution Section -->
+                <div class="mb-6">
+                    <h4 class="font-bold text-primary mb-3"><i class="fas fa-hand-holding-dollar mr-2"></i>本月投入資金</h4>
+                    <div class="space-y-3">
+                        <!-- User -->
+                        <div class="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                            <div class="flex justify-between items-center">
+                                <span class="text-blue-800 font-medium">我的轉帳投入</span>
+                                <span class="text-blue-800 font-bold">+${formatCurrency(userContribution, 'TWD')}</span>
+                            </div>
+                        </div>
+                        <!-- Partner -->
+                        <div class="bg-orange-50 p-3 rounded-lg border border-orange-100">
+                            <div class="flex justify-between items-center">
+                                <span class="text-orange-800 font-medium">隊友/外部投入</span>
+                                <span class="text-orange-800 font-bold">+${formatCurrency(partnerContribution, 'TWD')}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expense Section -->
+                <div>
+                    <div class="flex justify-between items-end mb-3 border-b pb-2 border-base">
+                        <h4 class="font-bold text-primary"><i class="fas fa-receipt mr-2"></i>本月共同支出</h4>
+                        <span class="text-red-600 font-bold text-lg">-${formatCurrency(totalJointExpense, 'TWD')}</span>
+                    </div>
+                    <div class="space-y-2">
+                        ${jointExpenses.length === 0 ? '<p class="text-center text-gray-400 py-4">尚無支出紀錄</p>' : ''}
+                        ${jointExpenses.map(t => `
+                            <div class="p-2 hover:bg-gray-50 rounded border-b border-gray-100 last:border-0">
+                                <div class="flex justify-between items-center text-sm">
+                                    <span>${t.name}</span>
+                                    <span class="font-medium text-gray-700">-${formatCurrency(t.amount, t.currency)}</span>
+                                </div>
+                                ${t.note ? `<div class="text-xs text-gray-400 mt-1 pl-1"><i class="fas fa-sticky-note mr-1"></i>${t.note}</div>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            // 4. Calculate Historical Monthly Stats (New Feature: Annual/Monthly Overview)
+            // Note: Using Natural Month (Calendar Month) for overview consistency
+            const historyStats = {};
+
+            appData.transactions.forEach(t => {
+                const date = new Date(t.timestamp);
+                const year = date.getFullYear();
+                const month = date.getMonth() + 1;
+                const key = `${year}-${month.toString().padStart(2, '0')}`;
+
+                if (!historyStats[key]) {
+                    historyStats[key] = { user: 0, partner: 0, expense: 0 };
+                }
+
+                const amountTWD = convertToTWD(t.amount, t.currency);
+
+                // Check Joint Account Logic
+                if (t.type === 'transfer' && t.toAccount === '共同帳戶') {
+                    historyStats[key].user += amountTWD;
+                } else if (t.type === 'income' && t.account === '共同帳戶') {
+                    historyStats[key].partner += amountTWD;
+                } else if (t.type === 'expense' && t.account === '共同帳戶') {
+                    historyStats[key].expense += amountTWD;
+                }
+            });
+
+            // Sort keys descending (Newest first)
+            const sortedKeys = Object.keys(historyStats).sort((a, b) => b.localeCompare(a));
+
+            // Generate Overview Table HTML
+            let overviewHtml = `
+                <div class="mt-10 pt-6 border-t-2 border-dashed border-base/50">
+                    <h4 class="font-bold text-primary mb-4 text-lg"><i class="fas fa-chart-line mr-2"></i>年度/每月收支總覽</h4>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs sm:text-sm text-center border-collapse">
+                            <thead class="bg-primary text-white">
+                                <tr>
+                                    <th class="p-2 rounded-tl-lg">月份</th>
+                                    <th class="p-2">我投入</th>
+                                    <th class="p-2">隊友投入</th>
+                                    <th class="p-2">支出</th>
+                                    <th class="p-2 rounded-tr-lg">結餘</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-100">
+            `;
+
+            if (sortedKeys.length === 0) {
+                overviewHtml += `<tr><td colspan="5" class="p-4 text-gray-500">尚無共同帳戶交易紀錄</td></tr>`;
+            } else {
+                sortedKeys.forEach(key => {
+                    const stats = historyStats[key];
+                    // Skip months with no activity
+                    if (stats.user === 0 && stats.partner === 0 && stats.expense === 0) return;
+
+                    const net = (stats.user + stats.partner) - stats.expense;
+                    
+                    overviewHtml += `
+                        <tr class="hover:bg-secondary/30 transition">
+                            <td class="p-2 font-bold text-gray-600 border-r border-gray-100">${key}</td>
+                            <td class="p-2 text-blue-600">+${formatCurrency(stats.user, 'TWD')}</td>
+                            <td class="p-2 text-orange-600">+${formatCurrency(stats.partner, 'TWD')}</td>
+                            <td class="p-2 text-red-600">-${formatCurrency(stats.expense, 'TWD')}</td>
+                            <td class="p-2 font-bold ${net >= 0 ? 'text-green-600' : 'text-red-600'}">
+                                ${net > 0 ? '+' : ''}${formatCurrency(net, 'TWD')}
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            overviewHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-2 text-right">*總覽表採自然月(1號~月底)計算</p>
+                </div>
+            `;
+
+            // Append Overview to HTML
+            html += overviewHtml;
+            
+            if(placeholder) {
+                placeholder.innerHTML = html;
+            }
+        }
+
+
+        // --- 通用 Accordion 邏輯 ---
+
+        function toggleAccordion(id) {
+            const content = document.getElementById(id);
+            const icon = document.getElementById(`${id}-icon`);
+            
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                if(icon) icon.classList.add('rotate-180');
+            } else {
+                content.classList.add('hidden');
+                if(icon) icon.classList.remove('rotate-180');
+            }
+        }
+        
+        // --- 應用程式啟動 ---
+        window.onload = function() {
+            loadData();
+            setupTabs();
+            renderAssets();
+            renderFixedPlan();
+            renderCreditCardPrep(); // 新增：渲染信用卡預備金監控
+            renderBookkeepingFormOptions();
+            setTransactionDateDefault(); // 設定預設日期為今天
+            initCategorySelects(); 
+            renderTransactionHistory();
+            renderMonthlyStats(); 
+            renderCurrentYearStats(); // Init yearly stats
+            initHistoricalStats(); // Init historical select
+            renderJointAccount();
+            renderGoalTab();
+        };
+    </script>
+</body>
+</html>
