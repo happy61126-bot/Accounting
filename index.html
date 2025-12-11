@@ -83,10 +83,14 @@
 
     <!-- 頂部標題 -->
     <header class="bg-secondary/80 backdrop-blur-sm shadow-sm sticky top-0 z-10 border-b border-base">
-        <div class="max-w-xl mx-auto px-4 py-3">
+        <div class="max-w-xl mx-auto px-4 py-3 flex justify-between items-center">
             <h1 class="text-xl font-serif-tc font-bold text-primary tracking-wide">
                 <i class="fas fa-seedling text-accent mr-2"></i>Winds 資產分配計畫
             </h1>
+            <!-- 新增：資料管理按鈕 -->
+            <button onclick="openDataModal()" class="text-primary hover:text-accent transition p-1" title="資料管理">
+                <i class="fas fa-cog text-xl"></i>
+            </button>
         </div>
     </header>
 
@@ -419,6 +423,31 @@
                 <button onclick="closeDeleteModal()" class="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition">取消</button>
                 <button onclick="confirmDelete()" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-md transition">確認刪除</button>
             </div>
+        </div>
+    </div>
+
+    <!-- 新增：資料管理 Modal -->
+    <div id="data-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDataModal()"></div>
+        <div class="bg-white w-11/12 max-w-sm p-6 rounded-2xl shadow-2xl relative z-10 transform transition-all scale-100 text-center">
+            <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-database text-xl text-blue-600"></i>
+            </div>
+            <h3 class="text-xl font-bold mb-4 text-primary">資料管理</h3>
+            <p class="text-sm text-gray-500 mb-6">備份目前所有資料或從檔案還原</p>
+            
+            <div class="space-y-3">
+                <button onclick="exportData()" class="w-full py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary/90 shadow-md transition flex items-center justify-center">
+                    <i class="fas fa-file-export mr-2"></i>匯出資料 (備份)
+                </button>
+                
+                <button onclick="triggerImport()" class="w-full py-3 bg-white text-primary border-2 border-primary rounded-xl font-bold hover:bg-gray-50 transition flex items-center justify-center">
+                    <i class="fas fa-file-import mr-2"></i>匯入資料 (還原)
+                </button>
+                <input type="file" id="import-file" accept=".json" class="hidden" onchange="handleFileImport(this)">
+            </div>
+            
+            <button onclick="closeDataModal()" class="mt-6 text-gray-400 hover:text-gray-600 text-sm">關閉</button>
         </div>
     </div>
 
@@ -2125,6 +2154,97 @@
             }
         }
         
+        // --- 資料管理功能 (New) ---
+        function openDataModal() {
+            document.getElementById('data-modal').classList.remove('hidden');
+        }
+
+        function closeDataModal() {
+            document.getElementById('data-modal').classList.add('hidden');
+        }
+
+        function exportData() {
+            // 取得當前 LocalStorage 的資料
+            const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+            
+            if (!savedData) {
+                showAlert('warning', '尚無資料可匯出');
+                return;
+            }
+
+            // 建立 Blob 物件
+            const blob = new Blob([savedData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            // 建立下載連結
+            const a = document.createElement('a');
+            a.href = url;
+            const date = new Date().toISOString().split('T')[0];
+            a.download = `winds_finance_backup_${date}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showAlert('success', '資料匯出成功！');
+            closeDataModal();
+        }
+
+        function triggerImport() {
+            document.getElementById('import-file').click();
+        }
+
+        function handleFileImport(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    
+                    // 簡易驗證資料結構 (檢查是否有關鍵欄位)
+                    if (!json.transactions || !json.exchangeRates) {
+                        throw new Error('無效的資料格式');
+                    }
+
+                    // 1. 寫入 LocalStorage
+                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json));
+                    
+                    // 2. 直接更新當前記憶體中的數據 (不重新整理頁面)
+                    appData.transactions = json.transactions || [];
+                    appData.exchangeRates = json.exchangeRates || { TWD: 1, USD: 32.0, CNY: 4.4 };
+                    appData.jointAccount = json.jointAccount || JOINT_ACCOUNT_INITIAL;
+                    appData.monthlyIncome = json.monthlyIncome || 50000;
+                    appData.fixedExpenses = json.fixedExpenses || JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
+
+                    // 3. 重新計算資產餘額
+                    applyTransactionsToAssets();
+
+                    // 4. 重新渲染所有介面區塊
+                    renderAssets();
+                    renderFixedPlan(); 
+                    renderCreditCardPrep(); 
+                    renderTransactionHistory();
+                    renderMonthlyStats(); 
+                    renderCurrentYearStats(); 
+                    initHistoricalStats(); 
+                    renderJointAccount();
+                    renderGoalTab();
+
+                    showAlert('success', '資料匯入成功！已更新畫面。');
+
+                } catch (err) {
+                    console.error(err);
+                    showAlert('danger', '匯入失敗：檔案格式錯誤');
+                }
+                // 清空 input 讓同一檔案可重複選取
+                input.value = '';
+            };
+            reader.readAsText(file);
+            closeDataModal();
+        }
+
         // --- 應用程式啟動 ---
         window.onload = function() {
             loadData();
