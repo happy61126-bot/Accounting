@@ -2032,6 +2032,37 @@
             }
         }
 
+        // --- URL Query Parameter Logic for Quick Add (New Feature) ---
+        function checkUrlAndQuickAdd() {
+            const params = new URLSearchParams(window.location.search);
+            const action = params.get('action');
+
+            if (action === 'add') {
+                const amount = parseFloat(params.get('amount'));
+                const note = params.get('note') || '快速記帳';
+                // 預設參數 (若捷徑未提供)
+                const type = params.get('type') || 'expense';
+                const account = params.get('account') || '現金'; // 預設扣款帳戶
+                const category = params.get('category') || '飲食';
+                const subcategory = params.get('subcategory') || '其他';
+                
+                if (!isNaN(amount) && amount > 0) {
+                    saveNewTransaction(
+                        `${category}-${subcategory}`, 
+                        amount, 
+                        'TWD', 
+                        type, 
+                        account, 
+                        null, 
+                        note, 
+                        Date.now()
+                    );
+                    
+                    // 為了避免重新整理後又重複記帳，清除網址參數
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            }
+        }
 
         // --- 通用 Accordion 邏輯 ---
 
@@ -2054,18 +2085,20 @@
             setupTabs();
             renderAssets();
             renderFixedPlan();
-            renderCreditCardPrep(); // 新增：渲染信用卡預備金監控
+            renderCreditCardPrep(); 
             renderBookkeepingFormOptions();
-            setTransactionDateDefault(); // 設定預設日期為今天
+            setTransactionDateDefault(); 
             initCategorySelects(); 
             renderTransactionHistory();
             renderMonthlyStats(); 
-            renderCurrentYearStats(); // Init yearly stats
-            initHistoricalStats(); // Init historical select
+            renderCurrentYearStats(); 
+            initHistoricalStats(); 
             renderJointAccount();
             renderGoalTab();
+            
+            // 執行網址檢查 (放在最後)
+            checkUrlAndQuickAdd();
         };
     </script>
 </body>
 </html>
-
