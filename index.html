@@ -187,20 +187,20 @@
                     <form id="transaction-form" class="space-y-4">
                         
                         <div>
-                            <input type="date" id="transaction-date" required class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent bg-white text-gray-700 font-medium">
+                            <input type="date" id="transaction-date" required class="w-full max-w-[200px] p-2 border rounded-lg focus:ring-accent focus:border-accent bg-white text-gray-700 font-medium">
                         </div>
 
                         <div class="flex space-x-2">
-                             <select id="transaction-type" class="w-24 p-3 border rounded-lg focus:ring-accent focus:border-accent bg-gray-50" required>
+                             <select id="transaction-type" class="w-24 p-2 border rounded-lg focus:ring-accent focus:border-accent bg-gray-50" required>
                                 <option value="expense" selected>支出</option>
                                 <option value="income">收入</option>
                                 <option value="transfer">轉帳</option>
                             </select>
-                            <select id="transaction-category" class="flex-1 p-3 border rounded-lg focus:ring-accent focus:border-accent bg-white" required>
+                            <select id="transaction-category" class="flex-1 min-w-0 p-2 border rounded-lg focus:ring-accent focus:border-accent bg-white" required>
                                 <option value="" disabled selected>分類</option>
                                 <!-- Categories populated by JS -->
                             </select>
-                            <select id="transaction-subcategory" class="flex-1 p-3 border rounded-lg focus:ring-accent focus:border-accent bg-white" required>
+                            <select id="transaction-subcategory" class="flex-1 min-w-0 p-2 border rounded-lg focus:ring-accent focus:border-accent bg-white" required>
                                 <option value="" disabled selected>細項</option>
                                 <!-- Subcategories populated by JS -->
                             </select>
