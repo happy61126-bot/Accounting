@@ -88,14 +88,18 @@
                 <i class="fas fa-seedling text-accent mr-2"></i>Winds 資產分配計畫
             </h1>
             <!-- 右側功能按鈕區 -->
-            <div class="flex items-center space-x-4">
-                <!-- 恢復資料管理按鈕 (匯入/匯出) -->
-                <button onclick="openDataModal()" class="text-gray-400 hover:text-primary transition" title="資料管理(匯入/匯出)">
+            <div class="flex items-center space-x-3">
+                <!-- 資料管理按鈕 -->
+                <button onclick="openDataModal()" class="text-gray-400 hover:text-primary transition p-1" title="資料管理(匯入/匯出)">
                     <i class="fas fa-database text-lg"></i>
                 </button>
                 <!-- 股票管理按鈕 -->
-                <button onclick="openStockModal()" class="text-accent hover:text-primary transition" title="管理持股與股價">
+                <button onclick="openStockModal()" class="text-accent hover:text-primary transition p-1" title="管理持股與股價">
                     <i class="fas fa-chart-line text-lg"></i>
+                </button>
+                <!-- 新增：設定按鈕 -->
+                <button onclick="openSettingsModal()" class="text-gray-500 hover:text-primary transition p-1" title="設定與帳戶管理">
+                    <i class="fas fa-cog text-lg"></i>
                 </button>
             </div>
         </div>
@@ -169,6 +173,25 @@
                 <h3 class="text-xl font-serif-tc font-semibold mb-3 border-b pb-2 border-base">每月流動支出</h3>
                 <div id="fluid-expenses-list" class="space-y-2 bg-white p-4 rounded-xl shadow-md border border-base mb-6">
                     <!-- Fluid expenses will be rendered here -->
+                </div>
+
+                <!-- 本月信用卡應繳金額 -->
+                <div class="bg-white p-4 rounded-xl shadow-lg mb-6 border border-base">
+                    <button class="w-full flex justify-between items-center pb-2 border-b border-base focus:outline-none" onclick="toggleAccordion('bill-due-content')">
+                        <div class="flex items-center">
+                             <h3 class="text-lg font-serif-tc font-bold text-primary">
+                                <i class="fas fa-file-invoice-dollar text-accent mr-2"></i>本月信用卡應繳金額
+                            </h3>
+                            <span class="ml-2 text-xs text-white bg-red-500 px-2 py-1 rounded-full">需繳款</span>
+                        </div>
+                        <i class="fas fa-chevron-down text-sm transition-transform duration-300 transform" id="bill-due-content-icon"></i>
+                    </button>
+                    
+                    <div id="bill-due-content" class="hidden mt-4 space-y-2">
+                        <div id="bill-due-list" class="space-y-3">
+                            <!-- Content populated by JS -->
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 下月卡費預備金監控 -->
@@ -464,7 +487,90 @@
         </div>
     </div>
 
-    <!-- 新增：股票管理 Modal -->
+    <!-- 新增：設定 Modal (帳戶/卡片管理) -->
+    <div id="settings-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeSettingsModal()"></div>
+        <div class="bg-white w-11/12 max-w-lg p-6 rounded-2xl shadow-2xl relative z-10 transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold mb-4 text-primary flex items-center">
+                <i class="fas fa-cog mr-2 text-accent"></i>設定與帳戶管理
+            </h3>
+            
+            <!-- Tab 切換 -->
+            <div class="flex border-b border-gray-200 mb-4">
+                <button onclick="switchSettingsTab('accounts')" class="settings-tab-btn px-4 py-2 text-primary border-b-2 border-accent font-bold" data-target="settings-accounts-tab">帳戶管理</button>
+                <button onclick="switchSettingsTab('cards')" class="settings-tab-btn px-4 py-2 text-gray-400 hover:text-primary" data-target="settings-cards-tab">信用卡管理</button>
+            </div>
+
+            <!-- Tab 1: 帳戶管理 -->
+            <div id="settings-accounts-tab" class="settings-tab-content space-y-4">
+                <p class="text-sm text-gray-500">管理您的銀行、證券或現金帳戶。這些帳戶會顯示在「資產分配」中。</p>
+                
+                <!-- 新增帳戶表單 -->
+                <form id="add-account-form" class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <h4 class="font-bold text-sm text-primary mb-2">新增帳戶</h4>
+                    <div class="grid grid-cols-2 gap-2 mb-2">
+                        <input type="text" id="new-account-name" placeholder="帳戶名稱" required class="p-2 border rounded text-sm w-full">
+                        <select id="new-account-currency" class="p-2 border rounded text-sm w-full">
+                            <option value="TWD">TWD</option>
+                            <option value="USD">USD</option>
+                            <option value="CNY">CNY</option>
+                        </select>
+                    </div>
+                    <div class="flex space-x-2">
+                        <select id="new-account-type" class="p-2 border rounded text-sm flex-1">
+                            <option value="cash">一般現金/銀行</option>
+                            <option value="investment">證券/投資</option>
+                        </select>
+                        <button type="submit" class="bg-accent text-white px-4 py-2 rounded text-sm font-bold">新增</button>
+                    </div>
+                </form>
+
+                <!-- 帳戶列表 -->
+                <div id="settings-account-list" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    <!-- JS populated -->
+                </div>
+            </div>
+
+            <!-- Tab 2: 信用卡管理 -->
+            <div id="settings-cards-tab" class="settings-tab-content hidden space-y-4">
+                <p class="text-sm text-gray-500">管理您的信用卡資訊。設定扣款帳戶與日期以進行理財規劃。</p>
+                
+                <!-- 新增信用卡表單 -->
+                <form id="add-card-form" class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <h4 class="font-bold text-sm text-primary mb-2">新增信用卡</h4>
+                    <div class="space-y-2">
+                        <input type="text" id="new-card-name" placeholder="卡片名稱" required class="p-2 border rounded text-sm w-full">
+                        <select id="new-card-linked" class="p-2 border rounded text-sm w-full" required>
+                            <option value="" disabled selected>選擇扣款帳戶</option>
+                            <!-- JS populated -->
+                        </select>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-500">結帳日</label>
+                                <input type="number" id="new-card-billing" min="1" max="31" placeholder="日" required class="p-2 border rounded text-sm w-full">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500">繳款日</label>
+                                <input type="number" id="new-card-payment" min="1" max="31" placeholder="日" required class="p-2 border rounded text-sm w-full">
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full bg-accent text-white py-2 rounded text-sm font-bold mt-2">新增卡片</button>
+                    </div>
+                </form>
+
+                <!-- 卡片列表 -->
+                <div id="settings-card-list" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    <!-- JS populated -->
+                </div>
+            </div>
+
+            <div class="mt-4 text-right">
+                 <button onclick="closeSettingsModal()" class="text-gray-400 hover:text-gray-600 text-sm">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 股票管理 Modal -->
     <div id="stock-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
         <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeStockModal()"></div>
         <div class="bg-white w-11/12 max-w-lg p-6 rounded-2xl shadow-2xl relative z-10 transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
@@ -539,11 +645,9 @@
                     </div>
                     <div>
                         <label class="block text-sm text-gray-600">所屬帳戶</label>
-                        <!-- 修改：更新選單名稱 -->
+                        <!-- 修改：更新選單名稱 (JS動態生成) -->
                         <select id="new-stock-account" class="w-full p-2 border rounded-lg">
-                            <option value="永豐大戶投(台股)">永豐大戶投(台股)</option>
-                            <option value="國泰證券(美股)">國泰證券(美股)</option>
-                            <option value="國泰證券(台股)">國泰證券(台股)</option>
+                            <!-- populated by JS -->
                         </select>
                     </div>
                     <div>
@@ -582,23 +686,21 @@
         const LOCAL_STORAGE_KEY = 'winds_finance_data';
         const GOAL_AMOUNT = 1000000;
         
-        // **預設展開的分類 ID**
         const DEFAULT_OPEN_CATEGORIES = [
             'accordion-現金與帳戶',
             'accordion-證券戶'
         ];
 
-        // 信用卡分類資料
-        const CREDIT_CARDS = [
-            { name: "台新richart卡(玫瑰卡&gogo卡)", currency: "TWD", linkedAccount: "台新RICHART帳戶", billingDay: 7 },
-            { name: "玉山ubear卡", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5 },
-            { name: "玉山unicard卡", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5 },
-            { name: "國泰cube卡", currency: "TWD", linkedAccount: "國泰cube帳戶", billingDay: 5 },
-            { name: "星展現金回饋卡", currency: "TWD", linkedAccount: "星展銀行帳戶", billingDay: 7 },
-            { name: "聯邦吉鶴卡", currency: "TWD", linkedAccount: "聯邦newnewbank帳戶", billingDay: 3 }
+        // 信用卡初始資料 (作為預設值，之後存入 appData)
+        const CREDIT_CARDS_INITIAL = [
+            { id: 'c1', name: "台新richart卡(玫瑰卡&gogo卡)", currency: "TWD", linkedAccount: "台新RICHART帳戶", billingDay: 7, paymentDay: 21 },
+            { id: 'c2', name: "玉山ubear卡", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5, paymentDay: 20 },
+            { id: 'c3', name: "玉山unicard卡", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5, paymentDay: 20 },
+            { id: 'c4', name: "國泰cube卡", currency: "TWD", linkedAccount: "國泰cube帳戶", billingDay: 5, paymentDay: 20 },
+            { id: 'c5', name: "星展現金回饋卡", currency: "TWD", linkedAccount: "星展銀行帳戶", billingDay: 7, paymentDay: 25 },
+            { id: 'c6', name: "聯邦吉鶴卡", currency: "TWD", linkedAccount: "聯邦newnewbank帳戶", billingDay: 3, paymentDay: 18 }
         ];
 
-        // 記帳分類與細項 (支出)
         const EXPENSE_CATEGORIES = {
             "飲食": ["早餐", "午餐", "晚餐", "點心", "零食", "飲料", "其他"],
             "交通": ["加油費", "停車費", "計程車", "高鐵票", "火車票", "捷運票", "CAT-8625 支出", "MEL-7075 支出", "其他"],
@@ -610,14 +712,12 @@
             "家庭": ["孝親費", "懷孕相關", "小孩相關", "其他"]
         };
 
-        // 記帳分類 (收入)
         const INCOME_CATEGORIES_LIST = [
             "薪水", "獎金", "韵禾苑", "還款", "股利", "交易", "利息", "退款", "隊友貢獻", "其他"
         ];
 
-        // 用戶提供的初始靜態資產數據 (已移除證券戶的固定金額，改由股票庫存計算)
+        // 帳戶初始資料 (作為預設值)
         const STATIC_ASSETS = [
-            // category: 現金與帳戶
             { id: 'asset-1', name: "現金", amount: 514, currency: "TWD", type: "cash", category: "現金與帳戶" }, 
             { id: 'asset-2', name: "IPASSMONEY", amount: 2231, currency: "TWD", type: "cash", category: "現金與帳戶" }, 
             { id: 'asset-3', name: "永豐大戶銀行帳戶", amount: 239, currency: "TWD", type: "cash", category: "現金與帳戶" }, 
@@ -631,23 +731,16 @@
             { id: 'asset-13', name: "國泰cube帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
             { id: 'asset-14', name: "星展銀行帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
             { id: 'asset-15', name: "聯邦newnewbank帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            // category: 證券戶 (注意：amount 初始為 0，會自動加上股票市值)
-            // 修改：更新帳戶名稱
             { id: 'asset-10', name: "永豐大戶投(台股)", amount: 0, currency: "TWD", type: "investment", category: "證券戶" }, 
             { id: 'asset-11', name: "國泰證券(美股)", amount: 0, currency: "USD", type: "investment", category: "證券戶" }, 
             { id: 'asset-16', name: "國泰證券(台股)", amount: 0, currency: "TWD", type: "investment", category: "證券戶" },
         ];
         
-        // 初始股票庫存資料 (根據對話計算後的加權平均成本)
         const INITIAL_STOCKS = [
-            // 永豐大戶投 (台股)
-            // 修改：更新 account 對應名稱
             { id: 's1', code: '006208', name: '富邦台50', shares: 1850, cost: 90.97, currency: 'TWD', account: '永豐大戶投(台股)', currentPrice: 110.0 },
             { id: 's2', code: '00878', name: '國泰永續高股息', shares: 4000, cost: 18.77, currency: 'TWD', account: '永豐大戶投(台股)', currentPrice: 22.5 },
             { id: 's3', code: '2330', name: '台積電', shares: 70, cost: 1017.29, currency: 'TWD', account: '永豐大戶投(台股)', currentPrice: 1050.0 },
             { id: 's4', code: '2474', name: '可成', shares: 200, cost: 208.00, currency: 'TWD', account: '永豐大戶投(台股)', currentPrice: 210.0 },
-            // 國泰證券 (美股)
-            // 修改：更新 account 對應名稱
             { id: 's5', code: 'QQQ', name: 'Invesco QQQ', shares: 2.21135, cost: 543.11, currency: 'USD', account: '國泰證券(美股)', currentPrice: 550.0 },
             { id: 's6', code: 'VTI', name: 'Vanguard Total Stock', shares: 3.95795, cost: 303.44, currency: 'USD', account: '國泰證券(美股)', currentPrice: 310.0 }
         ];
@@ -671,8 +764,10 @@
 
         // --- 全域狀態 ---
         let appData = {
-            assets: [],
-            stocks: [], // 新增：股票庫存
+            accounts: [], // 存放帳戶定義
+            assets: [], // 存放計算後的資產狀態
+            stocks: [], 
+            creditCards: [], // 存放信用卡定義
             jointAccount: JOINT_ACCOUNT_INITIAL,
             transactions: [],
             exchangeRates: { TWD: 1, USD: 32.0, CNY: 4.4 },
@@ -731,7 +826,6 @@
         function calculateTotalAsset() {
             let totalTWD = 0;
             appData.assets.forEach(asset => {
-                // 自動計算資產總值：若為證券戶，amount 會在 applyTransactionsToAssets 中被加上股票市值
                 totalTWD += convertToTWD(asset.amount, asset.currency);
             });
             return totalTWD;
@@ -741,7 +835,7 @@
             const allAccounts = [...appData.assets, appData.jointAccount];
             let account = allAccounts.find(a => a.name === accountName);
             if (!account) {
-                const creditCard = CREDIT_CARDS.find(c => c.name === accountName);
+                const creditCard = appData.creditCards.find(c => c.name === accountName);
                 if (creditCard) {
                     return { name: creditCard.name, currency: creditCard.currency, type: 'credit_card' };
                 }
@@ -749,35 +843,21 @@
             return account;
         }
 
-        // --- 新增功能：匯率自動更新 ---
         async function fetchExchangeRates() {
             try {
-                // 使用免費公開的 API (Base: USD)
                 const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
                 if (!response.ok) throw new Error('API request failed');
-                
                 const data = await response.json();
-                
-                // 1. 更新 USD 對 TWD 匯率 (直接從 API 獲取)
                 const rateUSD = data.rates.TWD;
-                
-                // 2. 計算 CNY 對 TWD 匯率 (透過 USD 換算: 1 CNY = (1 USD -> TWD) / (1 USD -> CNY))
                 const rateCNY = data.rates.TWD / data.rates.CNY;
-
                 if (rateUSD && rateCNY) {
                     appData.exchangeRates.USD = parseFloat(rateUSD.toFixed(2));
                     appData.exchangeRates.CNY = parseFloat(rateCNY.toFixed(2));
-                    
-                    // 保存並重新渲染
                     saveData();
-                    renderAssets(); // 更新資產顯示
-                    
-                    // 顯示更新成功訊息 (可選)
-                    // console.log("匯率更新成功", appData.exchangeRates);
+                    renderAssets(); 
                 }
             } catch (error) {
-                console.error("匯率更新失敗，使用快取或預設值", error);
-                // 失敗時不跳出 alert 打擾使用者，靜默失敗即可
+                console.error("匯率更新失敗", error);
             }
         }
 
@@ -793,48 +873,43 @@
                     appData.jointAccount = parsedData.jointAccount || JOINT_ACCOUNT_INITIAL;
                     appData.monthlyIncome = parsedData.monthlyIncome || 50000;
                     appData.fixedExpenses = parsedData.fixedExpenses || JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
-                    
-                    // 載入股票資料，若無則使用預設
                     appData.stocks = parsedData.stocks || JSON.parse(JSON.stringify(INITIAL_STOCKS));
+                    
+                    // 載入自定義帳戶與信用卡，若無則使用預設
+                    appData.accounts = parsedData.accounts || JSON.parse(JSON.stringify(STATIC_ASSETS));
+                    appData.creditCards = parsedData.creditCards || JSON.parse(JSON.stringify(CREDIT_CARDS_INITIAL));
 
-                    // --- 新增：資料遷移邏輯 (Migration) ---
-                    // 檢查舊的帳戶名稱並自動更新為新名稱，避免資料關聯斷掉
+                    // 名稱遷移邏輯
                     const nameMapping = {
                         "永豐大戶投": "永豐大戶投(台股)",
                         "國泰證券": "國泰證券(美股)"
                     };
-
-                    // 1. 更新股票資料中的帳戶名稱
                     if (appData.stocks) {
                         appData.stocks.forEach(s => {
-                            if (nameMapping[s.account]) {
-                                s.account = nameMapping[s.account];
-                            }
+                            if (nameMapping[s.account]) s.account = nameMapping[s.account];
                         });
                     }
-
-                    // 2. 更新交易紀錄中的帳戶名稱
                     if (appData.transactions) {
                         appData.transactions.forEach(t => {
-                            if (nameMapping[t.account]) {
-                                t.account = nameMapping[t.account];
-                            }
-                            if (t.toAccount && nameMapping[t.toAccount]) {
-                                t.toAccount = nameMapping[t.toAccount];
-                            }
+                            if (nameMapping[t.account]) t.account = nameMapping[t.account];
+                            if (t.toAccount && nameMapping[t.toAccount]) t.toAccount = nameMapping[t.toAccount];
                         });
                     }
-                    // --- 遷移結束 ---
 
                 } else {
                     appData.fixedExpenses = JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
                     appData.stocks = JSON.parse(JSON.stringify(INITIAL_STOCKS));
+                    appData.accounts = JSON.parse(JSON.stringify(STATIC_ASSETS));
+                    appData.creditCards = JSON.parse(JSON.stringify(CREDIT_CARDS_INITIAL));
                 }
                 
                 applyTransactionsToAssets();
 
             } catch (e) {
                 console.error("載入 LocalStorage 失敗:", e);
+                // Fallback
+                appData.accounts = JSON.parse(JSON.stringify(STATIC_ASSETS));
+                appData.creditCards = JSON.parse(JSON.stringify(CREDIT_CARDS_INITIAL));
                 appData.assets = JSON.parse(JSON.stringify(STATIC_ASSETS));
                 appData.fixedExpenses = JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
                 appData.stocks = JSON.parse(JSON.stringify(INITIAL_STOCKS));
@@ -842,11 +917,13 @@
         }
         
         function applyTransactionsToAssets() {
-            // 1. 重置資產為初始靜態值
-            appData.assets = JSON.parse(JSON.stringify(STATIC_ASSETS));
+            // 1. 使用 accounts 定義來初始化 assets 狀態 (重置金額)
+            // 這裡我們假設 accounts 列表中的 amount 是初始值 (通常是0或手動設定的起始值)
+            // 為了簡化，每次重算都先複製一份 accounts
+            appData.assets = JSON.parse(JSON.stringify(appData.accounts));
             appData.jointAccount = JSON.parse(JSON.stringify(JOINT_ACCOUNT_INITIAL));
             
-            // 2. 應用交易紀錄 (現金流部分)
+            // 2. 應用交易紀錄
             const allAccountsTemp = [...appData.assets, appData.jointAccount];
 
             appData.transactions.forEach(t => {
@@ -886,12 +963,12 @@
                 appData.jointAccount = jointUpdated;
             }
             
-            // 3. 【關鍵修改】將股票市值加總到對應的證券戶 Asset 中
+            // 3. 將股票市值加總到對應的證券戶
             appData.stocks.forEach(stock => {
                 const targetAsset = appData.assets.find(a => a.name === stock.account);
                 if (targetAsset) {
-                    const stockValue = stock.shares * stock.currentPrice; // 市值
-                    targetAsset.amount += stockValue; // 加到帳戶總額中
+                    const stockValue = stock.shares * stock.currentPrice; 
+                    targetAsset.amount += stockValue; 
                 }
             });
 
@@ -903,7 +980,6 @@
             appData.jointAccount.amount = parseFloat(appData.jointAccount.amount.toFixed(0));
         }
 
-
         function saveData() {
             try {
                 const dataToSave = {
@@ -912,7 +988,9 @@
                     jointAccount: appData.jointAccount, 
                     monthlyIncome: appData.monthlyIncome,
                     fixedExpenses: appData.fixedExpenses,
-                    stocks: appData.stocks // 儲存股票資料
+                    stocks: appData.stocks,
+                    accounts: appData.accounts, // 儲存自定義帳戶
+                    creditCards: appData.creditCards // 儲存自定義信用卡
                 };
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
             } catch (e) {
@@ -920,8 +998,8 @@
                 showAlert('warning', '資料保存失敗，請檢查瀏覽器設定。');
             }
         }
-        
-        // --- Tab 導航 ---
+
+        // --- Tab 導航 (修復：補回 setupTabs 與 renderTabContent) ---
         function setupTabs() {
             const buttons = document.querySelectorAll('.nav-button');
             const contents = document.querySelectorAll('.tab-content');
@@ -954,6 +1032,7 @@
                     break;
                 case 'plan':
                     renderFixedPlan(); 
+                    renderMonthlyBillDue(); 
                     renderCreditCardPrep(); 
                     break;
                 case 'bookkeeping':
@@ -972,12 +1051,196 @@
                     break;
             }
         }
+        
+        // --- 設定/帳戶管理 Modal 邏輯 ---
+        function openSettingsModal() {
+            document.getElementById('settings-modal').classList.remove('hidden');
+            renderSettingsAccounts();
+            renderSettingsCards();
+            populateAccountDropdowns(); // 更新下拉選單
+            switchSettingsTab('accounts');
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settings-modal').classList.add('hidden');
+        }
+
+        function switchSettingsTab(tabName) {
+            document.querySelectorAll('.settings-tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+                btn.classList.remove('text-primary', 'border-b-2', 'border-accent', 'font-bold');
+                btn.classList.add('text-gray-400');
+            });
+
+            const targetContent = document.getElementById(`settings-${tabName}-tab`);
+            targetContent.classList.remove('hidden');
+            
+            const activeBtn = document.querySelector(`.settings-tab-btn[data-target="settings-${tabName}-tab"]`);
+            activeBtn.classList.remove('text-gray-400');
+            activeBtn.classList.add('text-primary', 'border-b-2', 'border-accent', 'font-bold');
+        }
+
+        // 渲染帳戶列表 (設定頁面)
+        function renderSettingsAccounts() {
+            const list = document.getElementById('settings-account-list');
+            list.innerHTML = '';
+            appData.accounts.forEach((acc, index) => {
+                list.innerHTML += `
+                    <div class="flex justify-between items-center p-2 bg-white border border-gray-200 rounded">
+                        <div class="text-sm">
+                            <span class="font-bold text-primary block">${acc.name}</span>
+                            <span class="text-xs text-gray-500">${acc.category} • ${acc.currency}</span>
+                        </div>
+                        <button onclick="deleteAccount(${index})" class="text-red-400 hover:text-red-600 px-2">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                `;
+            });
+        }
+
+        // 新增帳戶
+        document.getElementById('add-account-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const name = document.getElementById('new-account-name').value.trim();
+            const currency = document.getElementById('new-account-currency').value;
+            const type = document.getElementById('new-account-type').value;
+            
+            if(!name) return;
+            
+            // 檢查重複
+            if(appData.accounts.some(a => a.name === name)) {
+                showAlert('warning', '帳戶名稱已存在');
+                return;
+            }
+
+            const category = type === 'investment' ? '證券戶' : '現金與帳戶';
+            const newAcc = {
+                id: 'acc-' + Date.now(),
+                name,
+                amount: 0, // 初始餘額
+                currency,
+                type,
+                category
+            };
+
+            appData.accounts.push(newAcc);
+            applyTransactionsToAssets();
+            saveData();
+            
+            renderSettingsAccounts();
+            renderAssets(); // 更新主畫面
+            renderBookkeepingFormOptions(); // 更新記帳選單
+            populateAccountDropdowns(); // 新增：立即更新信用卡扣款帳戶的下拉選單
+            showAlert('success', `已新增帳戶：${name}`);
+            e.target.reset();
+        });
+
+        // 刪除帳戶
+        function deleteAccount(index) {
+            const accName = appData.accounts[index].name;
+            if(confirm(`確定要刪除「${accName}」嗎？\n注意：相關的歷史交易紀錄仍會保留，但無法再選擇此帳戶。`)) {
+                appData.accounts.splice(index, 1);
+                applyTransactionsToAssets();
+                saveData();
+                renderSettingsAccounts();
+                renderAssets();
+                renderBookkeepingFormOptions();
+                populateAccountDropdowns(); // 新增：刪除時也同步更新下拉選單，避免選到已刪除的帳戶
+                showAlert('info', '帳戶已刪除');
+            }
+        }
+
+        // 渲染信用卡列表 (設定頁面)
+        function renderSettingsCards() {
+            const list = document.getElementById('settings-card-list');
+            list.innerHTML = '';
+            appData.creditCards.forEach((card, index) => {
+                list.innerHTML += `
+                    <div class="flex justify-between items-center p-2 bg-white border border-gray-200 rounded">
+                        <div class="text-sm">
+                            <span class="font-bold text-primary block">${card.name}</span>
+                            <span class="text-xs text-gray-500">扣款: ${card.linkedAccount} • 結帳${card.billingDay}日 • 繳款${card.paymentDay}日</span>
+                        </div>
+                        <button onclick="deleteCard(${index})" class="text-red-400 hover:text-red-600 px-2">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                `;
+            });
+        }
+
+        // 填充新增卡片時的扣款帳戶選單
+        function populateAccountDropdowns() {
+            const select = document.getElementById('new-card-linked');
+            select.innerHTML = '<option value="" disabled selected>選擇扣款帳戶</option>';
+            appData.accounts.forEach(acc => {
+                select.innerHTML += `<option value="${acc.name}">${acc.name}</option>`;
+            });
+        }
+
+        // 新增信用卡
+        document.getElementById('add-card-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const name = document.getElementById('new-card-name').value.trim();
+            const linkedAccount = document.getElementById('new-card-linked').value;
+            const billingDay = parseInt(document.getElementById('new-card-billing').value);
+            const paymentDay = parseInt(document.getElementById('new-card-payment').value);
+
+            if(!name || !linkedAccount) return;
+
+            if(appData.creditCards.some(c => c.name === name)) {
+                showAlert('warning', '卡片名稱已存在');
+                return;
+            }
+
+            const newCard = {
+                id: 'card-' + Date.now(),
+                name,
+                currency: 'TWD', // 預設台幣卡
+                linkedAccount,
+                billingDay,
+                paymentDay
+            };
+
+            appData.creditCards.push(newCard);
+            saveData();
+            
+            renderSettingsCards();
+            renderCreditCardPrep(); // 更新理財規劃
+            renderMonthlyBillDue(); // 更新帳單
+            renderBookkeepingFormOptions(); // 更新記帳選單
+            showAlert('success', `已新增卡片：${name}`);
+            e.target.reset();
+        });
+
+        // 刪除信用卡
+        function deleteCard(index) {
+            const name = appData.creditCards[index].name;
+            if(confirm(`確定要刪除「${name}」嗎？`)) {
+                appData.creditCards.splice(index, 1);
+                saveData();
+                renderSettingsCards();
+                renderCreditCardPrep();
+                renderMonthlyBillDue();
+                renderBookkeepingFormOptions();
+                showAlert('info', '卡片已刪除');
+            }
+        }
 
         // --- 股票管理 Modal 邏輯 ---
         function openStockModal() {
             document.getElementById('stock-modal').classList.remove('hidden');
             renderStockUpdateList();
             renderTradeStockOptions();
+            // 更新新增股票時的帳戶選單
+            const stockAccSelect = document.getElementById('new-stock-account');
+            stockAccSelect.innerHTML = '';
+            // 只顯示 investment 類型的帳戶
+            appData.accounts.filter(a => a.type === 'investment').forEach(acc => {
+                stockAccSelect.innerHTML += `<option value="${acc.name}">${acc.name}</option>`;
+            });
+            
             switchStockTab('update');
         }
 
@@ -1000,7 +1263,7 @@
             activeBtn.classList.add('text-primary', 'border-b-2', 'border-accent', 'font-bold');
         }
 
-        // 渲染更新股價列表 (修改：加入成本欄位)
+        // 渲染更新股價列表
         function renderStockUpdateList() {
             const container = document.getElementById('stock-price-list');
             container.innerHTML = '';
@@ -1048,13 +1311,12 @@
             appData.stocks[index].currentPrice = parseFloat(price);
         }
 
-        // 新增：更新成本的暫存函數
         function updateTempStockCost(index, cost) {
             appData.stocks[index].cost = parseFloat(cost);
         }
 
         function saveStockPrices() {
-            applyTransactionsToAssets(); // 重新計算資產 (含新股價/成本)
+            applyTransactionsToAssets(); 
             saveData();
             renderAssets();
             renderGoalTab();
@@ -1062,7 +1324,6 @@
             showAlert('success', '持股資料已更新，資產與損益已重新計算。');
         }
 
-        // 渲染交易表單的股票選項
         function renderTradeStockOptions() {
             const select = document.getElementById('trade-stock-id');
             select.innerHTML = '';
@@ -1074,9 +1335,6 @@
             });
         }
 
-        // 移除 toggleTradeForm (因為新增功能已經獨立到 Tab 3)
-
-        // 新增股票表單提交處理 (Tab 3)
         document.getElementById('stock-add-form').addEventListener('submit', function(e) {
             e.preventDefault();
             const code = document.getElementById('new-stock-code').value;
@@ -1096,7 +1354,7 @@
                 code, name, account, currency,
                 shares: shares,
                 cost: cost, 
-                currentPrice: cost // 初始現價設為成本價，使用者可後續更新
+                currentPrice: cost 
             };
             appData.stocks.push(newStock);
             
@@ -1106,12 +1364,9 @@
             renderGoalTab();
             closeStockModal();
             showAlert('success', `已新增股票：${name}`);
-            
-            // 清空表單
             e.target.reset();
         });
 
-        // 交易表單提交處理 (Tab 2 - 僅處理買賣)
         document.getElementById('stock-trade-form').addEventListener('submit', function(e) {
             e.preventDefault();
             const action = document.getElementById('trade-action').value;
@@ -1132,13 +1387,11 @@
             }
 
             if (action === 'buy') {
-                // 重新計算平均成本
                 const totalCostOld = stock.shares * stock.cost;
                 const totalCostNew = shares * price;
                 const newTotalShares = stock.shares + shares;
                 stock.cost = (totalCostOld + totalCostNew) / newTotalShares;
                 stock.shares = newTotalShares;
-                // 更新現價為最新成交價
                 stock.currentPrice = price; 
                 showAlert('success', `已加碼 ${stock.name} ${shares}股`);
 
@@ -1148,7 +1401,6 @@
                     return;
                 }
                 stock.shares -= shares;
-                // 賣出不影響剩餘股票的平均成本，只更新現價
                 stock.currentPrice = price;
                 
                 if (stock.shares === 0) {
@@ -1163,7 +1415,7 @@
             renderAssets();
             renderGoalTab();
             closeStockModal();
-            e.target.reset(); // Reset form
+            e.target.reset();
         });
 
 
@@ -1175,7 +1427,6 @@
             document.getElementById('total-asset-twd').textContent = `TWD ${formatCurrency(totalTWD, 'TWD')}`;
             document.getElementById('exchange-rate-display').textContent = `匯率更新：USD=${appData.exchangeRates.USD}, CNY=${appData.exchangeRates.CNY}`;
 
-            // 計算證券總損益
             let totalPL = 0;
             appData.stocks.forEach(s => {
                 const marketVal = s.shares * s.currentPrice;
@@ -1192,7 +1443,6 @@
 
             container.innerHTML = '';
             
-            // 按照類別分組
             const groupedAssets = appData.assets.reduce((acc, asset) => {
                 acc[asset.category] = acc[asset.category] || [];
                 acc[asset.category].push(asset);
@@ -1211,7 +1461,6 @@
                 assets.forEach(asset => {
                     let stockDetailsHtml = '';
                     
-                    // 如果是證券戶，且有持股，顯示詳細表格
                     if (asset.type === 'investment') {
                         const accountStocks = appData.stocks.filter(s => s.account === asset.name && s.shares > 0);
                         if (accountStocks.length > 0) {
@@ -1339,7 +1588,8 @@
                         if (t.type === 'expense') {
                             const tDate = new Date(t.timestamp);
                             if (tDate >= startDate && tDate <= endDate) {
-                                const isCard = CREDIT_CARDS.some(c => c.name === t.account);
+                                // 使用 appData.creditCards 來檢查
+                                const isCard = appData.creditCards.some(c => c.name === t.account);
                                 if (isCard) currentMonthCardSpending += convertToTWD(t.amount, t.currency);
                             }
                         }
@@ -1377,6 +1627,85 @@
             });
             document.getElementById('total-fixed-expense').textContent = `TWD ${formatCurrency(totalFixedExpenseTWD, 'TWD')}`;
         }
+        
+        function renderMonthlyBillDue() {
+            const container = document.getElementById('bill-due-list');
+            if(!container) return;
+            container.innerHTML = '';
+            
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth(); 
+
+            // 使用 appData.creditCards
+            const accountGroups = {};
+
+            appData.creditCards.forEach(card => {
+                let stmtDate = new Date(currentYear, currentMonth, card.billingDay, 23, 59, 59);
+                let startDate = new Date(currentYear, currentMonth - 1, card.billingDay + 1, 0, 0, 0);
+
+                let cardTotal = 0;
+                appData.transactions.forEach(t => {
+                    if (t.type === 'expense' && t.account === card.name) {
+                        let tDate = new Date(t.timestamp);
+                        if (tDate >= startDate && tDate <= stmtDate) {
+                            cardTotal += convertToTWD(t.amount, t.currency);
+                        }
+                    }
+                });
+
+                if (cardTotal > 0) {
+                    if (!accountGroups[card.linkedAccount]) {
+                        accountGroups[card.linkedAccount] = {
+                            total: 0,
+                            cards: [],
+                            paymentDay: card.paymentDay 
+                        };
+                    }
+                    accountGroups[card.linkedAccount].total += cardTotal;
+                    accountGroups[card.linkedAccount].cards.push({
+                        name: card.name,
+                        amount: cardTotal
+                    });
+                }
+            });
+
+            if (Object.keys(accountGroups).length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 text-xs py-2">本月尚無應繳帳單</p>';
+                return;
+            }
+
+            for (const [accountName, group] of Object.entries(accountGroups)) {
+                let payDate = new Date(currentYear, currentMonth, group.paymentDay);
+                let payDateStr = `${payDate.getMonth()+1}/${payDate.getDate()}`;
+                
+                const cardsHtml = group.cards.map(c => 
+                    `<div class="flex justify-between text-xs text-gray-500">
+                        <span>${c.name}</span>
+                        <span>$${formatCurrency(c.amount, 'TWD')}</span>
+                    </div>`
+                ).join('');
+
+                container.innerHTML += `
+                    <div class="bg-secondary/30 p-3 rounded-lg border border-base/50">
+                        <div class="flex justify-between items-center mb-2">
+                            <div>
+                                <span class="font-bold text-primary block">${accountName}</span>
+                                <span class="text-xs text-gray-500">建議繳款期限: ${payDateStr}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-xs text-gray-500 block">總應繳金額</span>
+                                <span class="font-bold text-red-600 text-lg">TWD ${formatCurrency(group.total, 'TWD')}</span>
+                            </div>
+                        </div>
+                        <div class="pl-2 border-l-2 border-base space-y-1 mt-2 pt-2 border-t border-gray-200/50">
+                            ${cardsHtml}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
         function renderBookkeepingFormOptions() {
             const select = document.getElementById('transaction-account');
             select.innerHTML = '<option value="" disabled selected>選擇帳戶/卡片</option>';
@@ -1392,7 +1721,8 @@
             select.appendChild(groupAccounts);
             const groupCards = document.createElement('optgroup');
             groupCards.label = "信用卡";
-            CREDIT_CARDS.forEach(card => {
+            // 使用 appData.creditCards
+            appData.creditCards.forEach(card => {
                 const option = document.createElement('option');
                 option.value = card.name;
                 option.textContent = `${card.name} (${card.currency})`;
@@ -1550,6 +1880,7 @@
             renderCurrentYearStats();
             initHistoricalStats(); 
             renderCreditCardPrep();
+            renderMonthlyBillDue(); // 更新本月帳單
             renderFixedPlan(); 
         }
         function renderTransactionHistory() {
@@ -1623,7 +1954,7 @@
                 appData.transactions[tIndex].note = newNote;
                 const newDate = new Date(newDateStr); newDate.setHours(12, 0, 0, 0);
                 appData.transactions[tIndex].timestamp = newDate.getTime();
-                applyTransactionsToAssets(); saveData(); renderTransactionHistory(); renderAssets(); renderJointAccount(); renderGoalTab(); renderMonthlyStats(); renderCurrentYearStats(); renderCreditCardPrep(); renderFixedPlan();
+                applyTransactionsToAssets(); saveData(); renderTransactionHistory(); renderAssets(); renderJointAccount(); renderGoalTab(); renderMonthlyStats(); renderCurrentYearStats(); renderCreditCardPrep(); renderMonthlyBillDue(); renderFixedPlan();
                 closeEditModal(); showAlert('success', '紀錄修改成功！');
             }
         });
@@ -1634,7 +1965,7 @@
                 const index = appData.transactions.findIndex(t => t.id === transactionToDeleteId);
                 if (index > -1) {
                     appData.transactions.splice(index, 1);
-                    applyTransactionsToAssets(); saveData(); renderTransactionHistory(); renderAssets(); renderJointAccount(); renderGoalTab(); renderMonthlyStats(); renderCurrentYearStats(); renderCreditCardPrep(); renderFixedPlan();
+                    applyTransactionsToAssets(); saveData(); renderTransactionHistory(); renderAssets(); renderJointAccount(); renderGoalTab(); renderMonthlyStats(); renderCurrentYearStats(); renderCreditCardPrep(); renderMonthlyBillDue(); renderFixedPlan();
                 }
                 closeDeleteModal(); showAlert('info', '記帳記錄已刪除。');
             }
@@ -1666,7 +1997,7 @@
             const sortedStats = Object.entries(accountStats).sort((a, b) => b[1] - a[1]);
             sortedStats.forEach(([name, amount]) => {
                 const percent = totalExpenseTWD > 0 ? ((amount / totalExpenseTWD) * 100).toFixed(1) : 0;
-                const isCredit = CREDIT_CARDS.some(c => c.name === name);
+                const isCredit = appData.creditCards.some(c => c.name === name);
                 const iconClass = isCredit ? 'fa-credit-card text-blue-500' : 'fa-wallet text-amber-600';
                 container.innerHTML += `
                     <div class="flex items-center justify-between text-sm">
@@ -1831,7 +2162,7 @@
             if(!container) return;
             container.innerHTML = '';
             const accountMap = {}; 
-            CREDIT_CARDS.forEach(card => {
+            appData.creditCards.forEach(card => {
                 if (!accountMap[card.linkedAccount]) {
                     const assetInfo = appData.assets.find(a => a.name === card.linkedAccount) || { name: card.linkedAccount, amount: 0, currency: 'TWD' };
                     accountMap[card.linkedAccount] = { info: assetInfo, cards: [], totalCardExpense: 0 };
@@ -1878,13 +2209,9 @@
                     const json = JSON.parse(e.target.result);
                     if (!json.transactions || !json.exchangeRates) throw new Error('無效的資料格式');
                     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json));
-                    appData.transactions = json.transactions || [];
-                    appData.exchangeRates = json.exchangeRates || { TWD: 1, USD: 32.0, CNY: 4.4 };
-                    appData.jointAccount = json.jointAccount || JOINT_ACCOUNT_INITIAL;
-                    appData.monthlyIncome = json.monthlyIncome || 50000;
-                    appData.fixedExpenses = json.fixedExpenses || JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
-                    appData.stocks = json.stocks || JSON.parse(JSON.stringify(INITIAL_STOCKS));
-                    applyTransactionsToAssets(); renderAssets(); renderFixedPlan(); renderCreditCardPrep(); renderTransactionHistory(); renderMonthlyStats(); renderCurrentYearStats(); initHistoricalStats(); renderJointAccount(); renderGoalTab();
+                    // Reload data
+                    loadData();
+                    renderAssets(); renderFixedPlan(); renderCreditCardPrep(); renderMonthlyBillDue(); renderTransactionHistory(); renderMonthlyStats(); renderCurrentYearStats(); initHistoricalStats(); renderJointAccount(); renderGoalTab();
                     showAlert('success', '資料匯入成功！已更新畫面。');
                 } catch (err) { console.error(err); showAlert('danger', '匯入失敗：檔案格式錯誤'); }
                 input.value = '';
@@ -1905,12 +2232,66 @@
         function openDataModal() { document.getElementById('data-modal').classList.remove('hidden'); }
         function closeDataModal() { document.getElementById('data-modal').classList.add('hidden'); }
 
+        // --- Tab 導航 ---
+        function setupTabs() {
+            const buttons = document.querySelectorAll('.nav-button');
+            const contents = document.querySelectorAll('.tab-content');
+            
+            function switchTab(targetId) {
+                buttons.forEach(btn => {
+                    const isActive = btn.dataset.tab === targetId;
+                    btn.classList.toggle('active', isActive);
+                    btn.classList.toggle('text-gray-500', !isActive);
+                    btn.classList.toggle('text-accent', isActive);
+                });
+                
+                contents.forEach(content => {
+                    content.classList.toggle('hidden', content.id !== `${targetId}-tab`);
+                });
+                renderTabContent(targetId);
+            }
+
+            buttons.forEach(button => {
+                button.addEventListener('click', () => switchTab(button.dataset.tab));
+            });
+            switchTab('assets');
+        }
+
+        function renderTabContent(tabId) {
+            switch (tabId) {
+                case 'assets':
+                    renderAssets();
+                    renderGoalTab();
+                    break;
+                case 'plan':
+                    renderFixedPlan(); 
+                    renderMonthlyBillDue(); 
+                    renderCreditCardPrep(); 
+                    break;
+                case 'bookkeeping':
+                    renderBookkeepingFormOptions();
+                    initCategorySelects(); 
+                    renderTransactionHistory();
+                    renderMonthlyStats(); 
+                    renderCurrentYearStats(); 
+                    initHistoricalStats(); 
+                    break;
+                case 'joint':
+                    renderJointAccount();
+                    break;
+                case 'goal':
+                    renderGoalTab();
+                    break;
+            }
+        }
+
         window.onload = function() {
             loadData();
             setupTabs();
             renderAssets();
             renderFixedPlan();
-            renderCreditCardPrep(); 
+            renderCreditCardPrep();
+            renderMonthlyBillDue(); // 新增：啟動時渲染本月信用卡帳單
             renderBookkeepingFormOptions();
             setTransactionDateDefault(); 
             initCategorySelects(); 
@@ -1921,11 +2302,8 @@
             renderJointAccount();
             renderGoalTab();
             checkUrlAndQuickAdd();
-            // 新增：啟動時抓取匯率
             fetchExchangeRates();
         };
     </script>
 </body>
 </html>
-
-
