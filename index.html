@@ -712,8 +712,9 @@
             "家庭": ["孝親費", "懷孕相關", "小孩相關", "其他"]
         };
 
+        // 記帳分類 (收入) - 新增 "退刷", "回饋金"
         const INCOME_CATEGORIES_LIST = [
-            "薪水", "獎金", "韵禾苑", "還款", "股利", "交易", "利息", "退款", "隊友貢獻", "其他"
+            "薪水", "獎金", "韵禾苑", "還款", "股利", "交易", "利息", "退款", "隊友貢獻", "退刷", "回饋金", "其他"
         ];
 
         // 帳戶初始資料 (作為預設值)
@@ -999,7 +1000,7 @@
             }
         }
 
-        // --- Tab 導航 (修復：補回 setupTabs 與 renderTabContent) ---
+        // --- Tab 導航 ---
         function setupTabs() {
             const buttons = document.querySelectorAll('.nav-button');
             const contents = document.querySelectorAll('.tab-content');
@@ -1588,7 +1589,6 @@
                         if (t.type === 'expense') {
                             const tDate = new Date(t.timestamp);
                             if (tDate >= startDate && tDate <= endDate) {
-                                // 使用 appData.creditCards 來檢查
                                 const isCard = appData.creditCards.some(c => c.name === t.account);
                                 if (isCard) currentMonthCardSpending += convertToTWD(t.amount, t.currency);
                             }
@@ -1646,10 +1646,15 @@
 
                 let cardTotal = 0;
                 appData.transactions.forEach(t => {
-                    if (t.type === 'expense' && t.account === card.name) {
+                    if (t.account === card.name) {
                         let tDate = new Date(t.timestamp);
                         if (tDate >= startDate && tDate <= stmtDate) {
-                            cardTotal += convertToTWD(t.amount, t.currency);
+                            const val = convertToTWD(t.amount, t.currency);
+                            if (t.type === 'expense') {
+                                cardTotal += val;
+                            } else if (t.type === 'income') {
+                                cardTotal -= val; // 修正：將收入(退刷/回饋金)從支出中扣除
+                            }
                         }
                     }
                 });
@@ -2171,14 +2176,20 @@
                 accountMap[card.linkedAccount].cards.push({ ...card, cycleStart: startDate, cycleEnd: endDate, amount: 0 });
             });
             appData.transactions.forEach(t => {
-                if (t.type !== 'expense') return;
                 const tDate = new Date(t.timestamp);
                 for (const accName in accountMap) {
                     const group = accountMap[accName];
                     const matchedCardData = group.cards.find(c => c.name === t.account);
                     if (matchedCardData && tDate >= matchedCardData.cycleStart && tDate <= matchedCardData.cycleEnd) {
-                        group.totalCardExpense += convertToTWD(t.amount, t.currency);
-                        matchedCardData.amount += convertToTWD(t.amount, t.currency);
+                        const val = convertToTWD(t.amount, t.currency);
+                        if (t.type === 'expense') {
+                            group.totalCardExpense += val;
+                            matchedCardData.amount += val;
+                        } else if (t.type === 'income') {
+                            // 修正：將收入從信用卡支出中扣除
+                            group.totalCardExpense -= val;
+                            matchedCardData.amount -= val;
+                        }
                         break; 
                     }
                 }
