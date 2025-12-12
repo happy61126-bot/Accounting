@@ -2399,35 +2399,29 @@
                 accountMap[card.linkedAccount].cards.push({ ...card, cycleStart: startDate, cycleEnd: endDate, amount: 0 });
             });
             appData.transactions.forEach(t => {
-                if (t.type !== 'expense') return;
+                if (t.type !== 'expense' && t.type !== 'income') return; // 只處理支出和收入(退刷)
                 const tDate = new Date(t.timestamp);
+                
+                // 1. 先計算「有效日期」 (若勾選延後，月份+1)
+                let effectiveDate = new Date(tDate);
+                if (t.isNextCycle) {
+                    effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+                }
+
                 for (const accName in accountMap) {
                     const group = accountMap[accName];
                     const matchedCardData = group.cards.find(c => c.name === t.account);
-                    if (matchedCardData && tDate >= matchedCardData.cycleStart && tDate <= matchedCardData.cycleEnd) {
+                    
+                    // 2. 使用「有效日期」來判斷是否屬於該週期
+                    if (matchedCardData && effectiveDate >= matchedCardData.cycleStart && effectiveDate <= matchedCardData.cycleEnd) {
                         const val = convertToTWD(t.amount, t.currency);
-                        
-                        // 處理跨月邏輯：如果是 isNextCycle，則該交易不屬於本期（即上個月消費被跨到本期）
-                        // 因為 renderCreditCardPrep 是計算「即將到來的下期帳單」，所以邏輯是：
-                        // 1. 正常交易：日期在週期內 -> 計入
-                        // 2. 跨月交易：如果這筆交易其實是上個月的，但因為 isNextCycle 被推遲到本期 -> 計入
-                        
-                        // 簡化邏輯：如果 t.isNextCycle 為真，我們假裝它的日期是下個月，看它是否落入當前週期
-                        let effectiveDate = new Date(tDate);
-                        if (t.isNextCycle) {
-                            effectiveDate.setMonth(effectiveDate.getMonth() + 1);
-                        }
-
-                        if (effectiveDate >= matchedCardData.cycleStart && effectiveDate <= matchedCardData.cycleEnd) {
+                        if (t.type === 'expense') {
                             group.totalCardExpense += val;
                             matchedCardData.amount += val;
                         } else if (t.type === 'income') {
-                             // 處理退刷/回饋金 (假設退刷也跟著該期帳單走)
-                             // 如果是收入，也要看是否在當期
-                             if (effectiveDate >= matchedCardData.cycleStart && effectiveDate <= matchedCardData.cycleEnd) {
-                                group.totalCardExpense -= val;
-                                matchedCardData.amount -= val;
-                             }
+                            // 收入(退刷/回饋金)扣除
+                            group.totalCardExpense -= val;
+                            matchedCardData.amount -= val;
                         }
                         break; 
                     }
@@ -2557,5 +2551,6 @@
     </script>
 </body>
 </html>
+
 
 
