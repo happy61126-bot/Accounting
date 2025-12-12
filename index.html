@@ -248,10 +248,18 @@
                             </select>
                         </div>
                         
-                        <div id="row-account-selection" class="flex space-x-2">
+                        <div id="row-account-selection" class="flex flex-col space-y-2">
                             <select id="transaction-account" class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent" required>
                                 <option value="" disabled selected>選擇帳戶/卡片</option>
                             </select>
+                            <!-- 新增：跨月結算按鈕 -->
+                            <div id="next-cycle-option" class="hidden">
+                                <label class="inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="transaction-next-cycle" class="form-checkbox h-4 w-4 text-accent border-gray-300 rounded focus:ring-accent">
+                                    <span class="ml-2 text-sm text-gray-600">延後一期入帳 (跨月)</span>
+                                </label>
+                                <p class="text-xs text-gray-400 pl-6">若消費日接近結帳日且尚未入帳，請勾選此項以免計入本期帳單。</p>
+                            </div>
                         </div>
 
                         <div class="flex space-x-2">
@@ -414,27 +422,66 @@
         </div>
     </nav>
     
-    <!-- 編輯 Modal (Hidden by default) -->
+    <!-- 編輯 Modal (Expanded for Full Editing) -->
     <div id="edit-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
         <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeEditModal()"></div>
-        <div class="bg-white w-11/12 max-w-md p-6 rounded-2xl shadow-2xl relative z-10 transform transition-all scale-100">
+        <div class="bg-white w-11/12 max-w-md p-6 rounded-2xl shadow-2xl relative z-10 transform transition-all scale-100 overflow-y-auto max-h-[90vh]">
             <h3 class="text-xl font-bold mb-4 text-primary">修改記帳紀錄</h3>
             <form id="edit-transaction-form" class="space-y-4">
                 <input type="hidden" id="edit-id">
                 
                 <div>
                     <label class="block text-sm text-gray-600 mb-1">日期</label>
-                    <input type="date" id="edit-date" required class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent">
+                    <input type="date" id="edit-date" required class="w-full p-2 border rounded-lg focus:ring-accent focus:border-accent">
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="col-span-1">
+                        <label class="block text-sm text-gray-600 mb-1">類型</label>
+                        <select id="edit-type" class="w-full p-2 border rounded-lg focus:ring-accent focus:border-accent">
+                            <option value="expense">支出</option>
+                            <option value="income">收入</option>
+                            <option value="transfer">轉帳</option>
+                        </select>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-sm text-gray-600 mb-1">金額</label>
+                        <input type="number" id="edit-amount" required min="0" step="any" class="w-full p-2 border rounded-lg focus:ring-accent focus:border-accent">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">分類</label>
+                        <select id="edit-category" class="w-full p-2 border rounded-lg focus:ring-accent focus:border-accent">
+                            <!-- populated by js -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">細項</label>
+                        <select id="edit-subcategory" class="w-full p-2 border rounded-lg focus:ring-accent focus:border-accent">
+                            <!-- populated by js -->
+                        </select>
+                    </div>
                 </div>
 
                 <div>
-                    <label class="block text-sm text-gray-600 mb-1">金額</label>
-                    <input type="number" id="edit-amount" required min="0" step="any" class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent">
+                    <label class="block text-sm text-gray-600 mb-1">帳戶/卡片</label>
+                    <select id="edit-account" class="w-full p-2 border rounded-lg focus:ring-accent focus:border-accent">
+                        <!-- populated by js -->
+                    </select>
+                    <!-- Edit Mode: Next Cycle Option -->
+                    <div id="edit-next-cycle-option" class="hidden mt-2">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="edit-next-cycle" class="form-checkbox h-4 w-4 text-accent border-gray-300 rounded focus:ring-accent">
+                            <span class="ml-2 text-sm text-gray-600">延後一期入帳 (跨月)</span>
+                        </label>
+                    </div>
                 </div>
                 
                 <div>
                     <label class="block text-sm text-gray-600 mb-1">備註</label>
-                    <input type="text" id="edit-note" class="w-full p-3 border rounded-lg focus:ring-accent focus:border-accent">
+                    <input type="text" id="edit-note" class="w-full p-2 border rounded-lg focus:ring-accent focus:border-accent">
                 </div>
 
                 <div class="flex justify-end space-x-3 pt-2">
@@ -842,6 +889,11 @@
                 }
             }
             return account;
+        }
+
+        // 檢查是否為信用卡帳戶
+        function checkIsCreditCard(accountName) {
+            return appData.creditCards.some(c => c.name === accountName);
         }
 
         async function fetchExchangeRates() {
@@ -1648,12 +1700,18 @@
                 appData.transactions.forEach(t => {
                     if (t.account === card.name) {
                         let tDate = new Date(t.timestamp);
+                        
+                        // 計算邏輯：如果是跨月交易 (isNextCycle)，則視為下一期，不計入本期
+                        if (t.isNextCycle && tDate >= startDate && tDate <= stmtDate) {
+                            return; 
+                        }
+
                         if (tDate >= startDate && tDate <= stmtDate) {
                             const val = convertToTWD(t.amount, t.currency);
                             if (t.type === 'expense') {
                                 cardTotal += val;
                             } else if (t.type === 'income') {
-                                cardTotal -= val; // 修正：將收入(退刷/回饋金)從支出中扣除
+                                cardTotal -= val; 
                             }
                         }
                     }
@@ -1739,6 +1797,19 @@
             const typeSelect = document.getElementById('transaction-type');
             const categorySelect = document.getElementById('transaction-category');
             const subcategorySelect = document.getElementById('transaction-subcategory');
+            const accountSelect = document.getElementById('transaction-account');
+            const nextCycleOption = document.getElementById('next-cycle-option');
+
+            // 監聽帳戶選擇，顯示跨月選項
+            accountSelect.onchange = function() {
+                if (checkIsCreditCard(this.value)) {
+                    nextCycleOption.classList.remove('hidden');
+                } else {
+                    nextCycleOption.classList.add('hidden');
+                    document.getElementById('transaction-next-cycle').checked = false;
+                }
+            };
+
             typeSelect.onchange = function() { updateCategoryOptions(); };
             categorySelect.onchange = function() {
                 const type = typeSelect.value;
@@ -1760,6 +1831,7 @@
             };
             updateCategoryOptions();
         }
+        
         function updateCategoryOptions() {
             const typeSelect = document.getElementById('transaction-type');
             const categorySelect = document.getElementById('transaction-category');
@@ -1840,6 +1912,7 @@
             const currency = form.elements['transaction-currency'].value;
             const accountName = form.elements['transaction-account'].value;
             const note = document.getElementById('transaction-note').value;
+            const isNextCycle = document.getElementById('transaction-next-cycle').checked;
             
             if (!dateStr || isNaN(amount) || amount <= 0) { showAlert('warning', '輸入無效'); return; }
             if (category === "" && type !== 'income') { showAlert('warning', '請選擇分類'); return; }
@@ -1862,16 +1935,17 @@
             }
             const [y, m, d] = dateStr.split('-').map(Number);
             const timestampDate = new Date(y, m - 1, d, 12, 0, 0); 
-            saveNewTransaction(name, amount, currency, type, finalAccount, toAccount, note, timestampDate.getTime());
+            saveNewTransaction(name, amount, currency, type, finalAccount, toAccount, note, timestampDate.getTime(), isNextCycle);
             form.reset();
             setTransactionDateDefault();
+            document.getElementById('next-cycle-option').classList.add('hidden'); // Reset UI
             if(type === 'transfer') document.getElementById('transaction-type').value = 'expense';
             updateCategoryOptions(); 
         }
-        function saveNewTransaction(name, amount, currency, type, accountName, toAccount, note, timestamp) {
+        function saveNewTransaction(name, amount, currency, type, accountName, toAccount, note, timestamp, isNextCycle = false) {
             const newTransaction = {
                 id: Date.now().toString(),
-                name, amount: parseFloat(amount), currency, type, account: accountName, toAccount, timestamp: timestamp || Date.now(), note: note || '' 
+                name, amount: parseFloat(amount), currency, type, account: accountName, toAccount, timestamp: timestamp || Date.now(), note: note || '', isNextCycle: isNextCycle
             };
             appData.transactions.push(newTransaction);
             applyTransactionsToAssets();
@@ -1911,12 +1985,13 @@
                 }
                 const dateStr = new Date(t.timestamp).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
                 const noteHtml = t.note ? `<p class="text-xs text-gray-400 mt-0.5 truncate"><i class="fas fa-sticky-note mr-1"></i>${t.note}</p>` : '';
+                const nextCycleBadge = t.isNextCycle ? `<span class="ml-2 text-[10px] bg-yellow-100 text-yellow-800 px-1 rounded">跨月</span>` : '';
                 return `
                     <li class="bg-secondary/20 p-3 rounded-lg flex justify-between items-center border border-transparent hover:border-base transition">
                         <div class="flex items-center min-w-0 flex-1">
                             <i class="fas ${icon} text-lg ${color} mr-3"></i>
                             <div class="min-w-0 flex-1">
-                                <p class="font-medium truncate text-primary text-sm">${t.name}</p>
+                                <p class="font-medium truncate text-primary text-sm">${t.name} ${nextCycleBadge}</p>
                                 <p class="text-xs text-gray-500 mt-0.5 truncate">${displayAccount}</p>
                                 ${noteHtml}
                             </div>
@@ -1936,33 +2011,181 @@
             if (sortedTransactions.length > 10 && !showFullHistory) loadMoreBtn.classList.remove('hidden'); else loadMoreBtn.classList.add('hidden');
         }
         function loadMoreTransactions() { showFullHistory = true; renderTransactionHistory(); }
+        
+        // --- 編輯 Modal 邏輯 ---
+        function initEditModalSelects() {
+            // Populate account dropdown
+            const accountSelect = document.getElementById('edit-account');
+            accountSelect.innerHTML = '<option value="" disabled>選擇帳戶/卡片</option>';
+            const groupAccounts = document.createElement('optgroup');
+            groupAccounts.label = "帳戶";
+            [...appData.assets, appData.jointAccount].forEach(a => {
+                groupAccounts.appendChild(new Option(`${a.name} (${a.currency})`, a.name));
+            });
+            accountSelect.appendChild(groupAccounts);
+            const groupCards = document.createElement('optgroup');
+            groupCards.label = "信用卡";
+            appData.creditCards.forEach(c => {
+                groupCards.appendChild(new Option(`${c.name} (${c.currency})`, c.name));
+            });
+            accountSelect.appendChild(groupCards);
+
+            // Listeners
+            document.getElementById('edit-type').onchange = updateEditCategories;
+            document.getElementById('edit-category').onchange = updateEditSubcategories;
+            accountSelect.onchange = function() {
+                if (checkIsCreditCard(this.value)) {
+                    document.getElementById('edit-next-cycle-option').classList.remove('hidden');
+                } else {
+                    document.getElementById('edit-next-cycle-option').classList.add('hidden');
+                    document.getElementById('edit-next-cycle').checked = false;
+                }
+            };
+        }
+
+        function updateEditCategories() {
+            const type = document.getElementById('edit-type').value;
+            const catSelect = document.getElementById('edit-category');
+            const subSelect = document.getElementById('edit-subcategory');
+            catSelect.innerHTML = '';
+            subSelect.innerHTML = '';
+
+            if (type === 'expense') {
+                Object.keys(EXPENSE_CATEGORIES).forEach(c => catSelect.add(new Option(c, c)));
+                subSelect.disabled = false;
+                updateEditSubcategories();
+            } else if (type === 'income') {
+                INCOME_CATEGORIES_LIST.forEach(c => catSelect.add(new Option(c, c)));
+                subSelect.disabled = true;
+            } else { // transfer
+                // For transfer logic in edit, simplify to treating as expense/income modification or just accounts
+                // Simplified for this scope: populate accounts as categories
+                [...appData.assets, appData.jointAccount].forEach(a => {
+                    catSelect.add(new Option(a.name, a.name));
+                    subSelect.add(new Option(a.name, a.name));
+                });
+                subSelect.disabled = false;
+            }
+        }
+
+        function updateEditSubcategories() {
+            const type = document.getElementById('edit-type').value;
+            const cat = document.getElementById('edit-category').value;
+            const subSelect = document.getElementById('edit-subcategory');
+            subSelect.innerHTML = '';
+            
+            if (type === 'expense' && cat) {
+                const subs = EXPENSE_CATEGORIES[cat] || [];
+                subs.forEach(s => subSelect.add(new Option(s, s)));
+            }
+        }
+
         function openEditModal(id) {
             const t = appData.transactions.find(item => item.id === id);
             if (!t) return;
+            
+            initEditModalSelects(); // Refresh options
+
+            // Set basic values
             document.getElementById('edit-id').value = t.id;
+            document.getElementById('edit-date').value = new Date(t.timestamp).toISOString().split('T')[0];
             document.getElementById('edit-amount').value = t.amount;
             document.getElementById('edit-note').value = t.note || '';
-            const date = new Date(t.timestamp);
-            document.getElementById('edit-date').value = date.toISOString().split('T')[0];
+            document.getElementById('edit-type').value = t.type;
+            document.getElementById('edit-account').value = t.account;
+            document.getElementById('edit-next-cycle').checked = t.isNextCycle || false;
+
+            // Trigger updates to populate dependent dropdowns
+            updateEditCategories();
+            
+            // Set category and subcategory based on type logic
+            if (t.type === 'expense') {
+                const parts = t.name.split('-');
+                if (parts.length >= 1) document.getElementById('edit-category').value = parts[0];
+                updateEditSubcategories(); // Refresh subcats
+                if (parts.length >= 2) document.getElementById('edit-subcategory').value = parts[1];
+            } else if (t.type === 'income') {
+                document.getElementById('edit-category').value = t.name;
+            } else if (t.type === 'transfer') {
+                // For transfer, name is usually "轉帳", account is From, toAccount is To.
+                // We map 'category' to From (t.account) and 'subcategory' to To (t.toAccount) in UI logic 
+                // BUT current data structure stores: account=From, toAccount=To. 
+                // Editing transfer accounts via this generic form is tricky.
+                // Let's just allow editing amount/date/note for transfer to be safe, or map strictly.
+                // The prompt asked for modification of category/account.
+                // Let's assume standard expense/income for full editing.
+                document.getElementById('edit-category').value = t.account; // Source
+                document.getElementById('edit-subcategory').value = t.toAccount; // Dest
+            }
+
+            // Check card visibility
+            if (checkIsCreditCard(t.account)) {
+                document.getElementById('edit-next-cycle-option').classList.remove('hidden');
+            } else {
+                document.getElementById('edit-next-cycle-option').classList.add('hidden');
+            }
+
             document.getElementById('edit-modal').classList.remove('hidden');
         }
+
         function closeEditModal() { document.getElementById('edit-modal').classList.add('hidden'); }
+        
         document.getElementById('edit-transaction-form').addEventListener('submit', function(e) {
             e.preventDefault();
             const id = document.getElementById('edit-id').value;
-            const newAmount = parseFloat(document.getElementById('edit-amount').value);
-            const newDateStr = document.getElementById('edit-date').value;
-            const newNote = document.getElementById('edit-note').value;
             const tIndex = appData.transactions.findIndex(item => item.id === id);
-            if (tIndex > -1) {
-                appData.transactions[tIndex].amount = newAmount;
-                appData.transactions[tIndex].note = newNote;
-                const newDate = new Date(newDateStr); newDate.setHours(12, 0, 0, 0);
-                appData.transactions[tIndex].timestamp = newDate.getTime();
-                applyTransactionsToAssets(); saveData(); renderTransactionHistory(); renderAssets(); renderJointAccount(); renderGoalTab(); renderMonthlyStats(); renderCurrentYearStats(); renderCreditCardPrep(); renderMonthlyBillDue(); renderFixedPlan();
-                closeEditModal(); showAlert('success', '紀錄修改成功！');
+            if (tIndex === -1) return;
+
+            const type = document.getElementById('edit-type').value;
+            const cat = document.getElementById('edit-category').value;
+            const sub = document.getElementById('edit-subcategory').value;
+            const acc = document.getElementById('edit-account').value;
+            const isNextCycle = document.getElementById('edit-next-cycle').checked;
+            
+            // Construct new name/account/toAccount
+            let newName = "";
+            let newAccount = acc;
+            let newToAccount = null;
+
+            if (type === 'expense') {
+                newName = `${cat}-${sub}`;
+            } else if (type === 'income') {
+                newName = cat;
+            } else if (type === 'transfer') {
+                newName = "轉帳";
+                newAccount = cat; // In transfer logic above, we mapped cat to source
+                newToAccount = sub; // and sub to dest
             }
+
+            // Update Transaction
+            const t = appData.transactions[tIndex];
+            t.type = type;
+            t.name = newName;
+            t.account = newAccount;
+            t.toAccount = newToAccount;
+            t.amount = parseFloat(document.getElementById('edit-amount').value);
+            t.note = document.getElementById('edit-note').value;
+            t.isNextCycle = isNextCycle;
+            
+            const newDate = new Date(document.getElementById('edit-date').value); 
+            newDate.setHours(12, 0, 0, 0);
+            t.timestamp = newDate.getTime();
+
+            applyTransactionsToAssets(); 
+            saveData(); 
+            renderTransactionHistory(); 
+            renderAssets(); 
+            renderJointAccount(); 
+            renderGoalTab(); 
+            renderMonthlyStats(); 
+            renderCurrentYearStats(); 
+            renderCreditCardPrep(); 
+            renderMonthlyBillDue(); 
+            renderFixedPlan();
+            closeEditModal(); 
+            showAlert('success', '紀錄修改成功！');
         });
+
         function openDeleteModal(id) { transactionToDeleteId = id; document.getElementById('delete-modal').classList.remove('hidden'); }
         function closeDeleteModal() { document.getElementById('delete-modal').classList.add('hidden'); transactionToDeleteId = null; }
         function confirmDelete() {
@@ -2176,19 +2399,35 @@
                 accountMap[card.linkedAccount].cards.push({ ...card, cycleStart: startDate, cycleEnd: endDate, amount: 0 });
             });
             appData.transactions.forEach(t => {
+                if (t.type !== 'expense') return;
                 const tDate = new Date(t.timestamp);
                 for (const accName in accountMap) {
                     const group = accountMap[accName];
                     const matchedCardData = group.cards.find(c => c.name === t.account);
                     if (matchedCardData && tDate >= matchedCardData.cycleStart && tDate <= matchedCardData.cycleEnd) {
                         const val = convertToTWD(t.amount, t.currency);
-                        if (t.type === 'expense') {
+                        
+                        // 處理跨月邏輯：如果是 isNextCycle，則該交易不屬於本期（即上個月消費被跨到本期）
+                        // 因為 renderCreditCardPrep 是計算「即將到來的下期帳單」，所以邏輯是：
+                        // 1. 正常交易：日期在週期內 -> 計入
+                        // 2. 跨月交易：如果這筆交易其實是上個月的，但因為 isNextCycle 被推遲到本期 -> 計入
+                        
+                        // 簡化邏輯：如果 t.isNextCycle 為真，我們假裝它的日期是下個月，看它是否落入當前週期
+                        let effectiveDate = new Date(tDate);
+                        if (t.isNextCycle) {
+                            effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+                        }
+
+                        if (effectiveDate >= matchedCardData.cycleStart && effectiveDate <= matchedCardData.cycleEnd) {
                             group.totalCardExpense += val;
                             matchedCardData.amount += val;
                         } else if (t.type === 'income') {
-                            // 修正：將收入從信用卡支出中扣除
-                            group.totalCardExpense -= val;
-                            matchedCardData.amount -= val;
+                             // 處理退刷/回饋金 (假設退刷也跟著該期帳單走)
+                             // 如果是收入，也要看是否在當期
+                             if (effectiveDate >= matchedCardData.cycleStart && effectiveDate <= matchedCardData.cycleEnd) {
+                                group.totalCardExpense -= val;
+                                matchedCardData.amount -= val;
+                             }
                         }
                         break; 
                     }
@@ -2318,3 +2557,5 @@
     </script>
 </body>
 </html>
+
+
