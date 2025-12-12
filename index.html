@@ -1634,25 +1634,50 @@
             });
             FLUID_EXPENSES.forEach(exp => {
                 let extraHtml = '';
+                
+                // --- 修改開始：零用金計算邏輯更新 ---
                 if (exp.name === '零用金') {
-                    const { startDate, endDate } = getCurrentFinancialMonthRange();
                     let currentMonthCardSpending = 0;
+                    
+                    // 1. 預先計算所有信用卡的當前週期 (比照預備金監控邏輯)
+                    const cardCycles = {};
+                    appData.creditCards.forEach(card => {
+                        cardCycles[card.name] = getCardCycle(card.billingDay);
+                    });
+
+                    // 2. 遍歷交易紀錄
                     appData.transactions.forEach(t => {
-                        if (t.type === 'expense') {
+                        // 只處理信用卡帳戶的交易
+                        if (cardCycles[t.account]) {
+                            const cycle = cardCycles[t.account];
                             const tDate = new Date(t.timestamp);
-                            if (tDate >= startDate && tDate <= endDate) {
-                                const isCard = appData.creditCards.some(c => c.name === t.account);
-                                if (isCard) currentMonthCardSpending += convertToTWD(t.amount, t.currency);
+                            let effectiveDate = new Date(tDate);
+
+                            // 處理跨月邏輯
+                            if (t.isNextCycle) {
+                                effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+                            }
+
+                            // 判斷是否落在該卡片的當前監控週期內
+                            if (effectiveDate >= cycle.startDate && effectiveDate <= cycle.endDate) {
+                                const val = convertToTWD(t.amount, t.currency);
+                                if (t.type === 'expense') {
+                                    currentMonthCardSpending += val;
+                                } else if (t.type === 'income') {
+                                    // 退刷/回饋金 扣除支出
+                                    currentMonthCardSpending -= val;
+                                }
                             }
                         }
                     });
+
                     const budget = convertToTWD(exp.amount, exp.currency);
                     const remaining = budget - currentMonthCardSpending;
                     const isOver = remaining < 0;
                     extraHtml = `
                         <div class="w-full text-xs mt-1 bg-gray-50 p-2 rounded">
                             <div class="flex justify-between mb-1">
-                                <span class="text-gray-500">本月已刷卡</span>
+                                <span class="text-gray-500">本月已刷卡 (含跨月)</span>
                                 <span class="font-bold text-red-500">-${formatCurrency(currentMonthCardSpending, 'TWD')}</span>
                             </div>
                             <div class="flex justify-between border-t border-gray-200 pt-1">
@@ -1665,6 +1690,8 @@
                         </div>
                     `;
                 }
+                // --- 修改結束 ---
+
                 fluidContainer.innerHTML += `
                     <div class="flex flex-col p-2 border-b last:border-b-0 border-base/50 text-base">
                         <div class="flex justify-between items-center w-full">
@@ -2551,6 +2578,3 @@
     </script>
 </body>
 </html>
-
-
-
