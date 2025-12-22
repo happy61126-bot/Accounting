@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta name="robots" content="noindex">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Winds資產分配計畫</title>
@@ -97,7 +96,7 @@
                 <button onclick="openStockModal()" class="text-accent hover:text-primary transition p-1" title="管理持股與股價">
                     <i class="fas fa-chart-line text-lg"></i>
                 </button>
-                <!-- 新增：設定按鈕 -->
+                <!-- 設定按鈕 -->
                 <button onclick="openSettingsModal()" class="text-gray-500 hover:text-primary transition p-1" title="設定與帳戶管理">
                     <i class="fas fa-cog text-lg"></i>
                 </button>
@@ -816,6 +815,7 @@
             assets: [], // 存放計算後的資產狀態
             stocks: [], 
             creditCards: [], // 存放信用卡定義
+            paidBills: [], // 新增：存放已支付的帳單紀錄 {cardName, amount, payDate}
             jointAccount: JOINT_ACCOUNT_INITIAL,
             transactions: [],
             exchangeRates: { TWD: 1, USD: 32.0, CNY: 4.4 },
@@ -931,6 +931,8 @@
                     // 載入自定義帳戶與信用卡，若無則使用預設
                     appData.accounts = parsedData.accounts || JSON.parse(JSON.stringify(STATIC_ASSETS));
                     appData.creditCards = parsedData.creditCards || JSON.parse(JSON.stringify(CREDIT_CARDS_INITIAL));
+                    // 載入已繳帳單紀錄
+                    appData.paidBills = parsedData.paidBills || [];
 
                     // 名稱遷移邏輯
                     const nameMapping = {
@@ -1042,8 +1044,9 @@
                     monthlyIncome: appData.monthlyIncome,
                     fixedExpenses: appData.fixedExpenses,
                     stocks: appData.stocks,
-                    accounts: appData.accounts, // 儲存自定義帳戶
-                    creditCards: appData.creditCards // 儲存自定義信用卡
+                    accounts: appData.accounts,
+                    creditCards: appData.creditCards,
+                    paidBills: appData.paidBills // 儲存已繳帳單
                 };
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
             } catch (e) {
@@ -1105,6 +1108,73 @@
             }
         }
         
+        // --- 自動繳卡費邏輯 ---
+        function checkAndPayBills() {
+            const now = new Date();
+            // 檢查本月和上個月的帳單 (避免太久沒開錯過)
+            for (let i = -1; i <= 0; i++) {
+                const targetDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
+                const targetYear = targetDate.getFullYear();
+                const targetMonth = targetDate.getMonth();
+
+                appData.creditCards.forEach(card => {
+                    // 計算該月的繳款日
+                    const payDate = new Date(targetYear, targetMonth, card.paymentDay);
+                    // 計算該期的結帳日
+                    const stmtDate = new Date(targetYear, targetMonth, card.billingDay, 23, 59, 59);
+                    // 計算該期的開始日
+                    const startDate = new Date(targetYear, targetMonth - 1, card.billingDay + 1, 0, 0, 0);
+
+                    // 如果今天已經超過繳款日，且尚未紀錄為已繳
+                    if (now >= payDate) {
+                        const billId = `pb-${card.name}-${payDate.getTime()}`; // 唯一ID
+                        
+                        // 檢查是否已繳
+                        if (!appData.paidBills.some(b => b.id === billId)) {
+                            // 計算該期帳單金額
+                            let total = 0;
+                            appData.transactions.forEach(t => {
+                                if (t.account === card.name) {
+                                    let tDate = new Date(t.timestamp);
+                                    if (t.isNextCycle && tDate >= startDate && tDate <= stmtDate) return;
+
+                                    if (tDate >= startDate && tDate <= stmtDate) {
+                                        const val = convertToTWD(t.amount, t.currency);
+                                        if (t.type === 'expense') total += val;
+                                        else if (t.type === 'income') total -= val;
+                                    }
+                                }
+                            });
+
+                            if (total > 0) {
+                                // 自動扣款：建立轉帳紀錄
+                                // 轉出：扣款帳戶, 轉入：卡片 (這裡轉入卡片是虛擬的，為了減少銀行資產)
+                                // 注意：因為 applyTransactionsToAssets 不會處理轉入卡片(非資產)，所以效果就是銀行資產減少
+                                const newTrans = {
+                                    id: Date.now().toString(),
+                                    name: `自動扣繳-${card.name}`,
+                                    amount: total,
+                                    currency: 'TWD',
+                                    type: 'transfer',
+                                    account: card.linkedAccount, // 從這裡扣錢
+                                    toAccount: card.name, // 轉去哪不重要，重要的是扣錢
+                                    timestamp: payDate.getTime(), // 繳款日當天
+                                    note: `系統自動扣繳 ${card.name} (${startDate.getMonth()+1}/${startDate.getDate()}~${stmtDate.getMonth()+1}/${stmtDate.getDate()})`
+                                };
+                                
+                                appData.transactions.push(newTrans);
+                                appData.paidBills.push({ id: billId, cardName: card.name, amount: total, payDate: payDate.getTime() });
+                                
+                                applyTransactionsToAssets();
+                                saveData();
+                                showAlert('success', `已自動扣繳 ${card.name} 帳單：${formatCurrency(total, 'TWD')}`);
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
         // --- 設定/帳戶管理 Modal 邏輯 ---
         function openSettingsModal() {
             document.getElementById('settings-modal').classList.remove('hidden');
@@ -1634,50 +1704,44 @@
             });
             FLUID_EXPENSES.forEach(exp => {
                 let extraHtml = '';
-                
-                // --- 修改開始：零用金計算邏輯更新 ---
                 if (exp.name === '零用金') {
                     let currentMonthCardSpending = 0;
-                    
-                    // 1. 預先計算所有信用卡的當前週期 (比照預備金監控邏輯)
                     const cardCycles = {};
                     appData.creditCards.forEach(card => {
-                        cardCycles[card.name] = getCardCycle(card.billingDay);
+                        const { startDate, endDate } = getCardCycle(card.billingDay);
+                        cardCycles[card.name] = { start: startDate, end: endDate };
                     });
 
-                    // 2. 遍歷交易紀錄
                     appData.transactions.forEach(t => {
-                        // 只處理信用卡帳戶的交易
-                        if (cardCycles[t.account]) {
-                            const cycle = cardCycles[t.account];
-                            const tDate = new Date(t.timestamp);
-                            let effectiveDate = new Date(tDate);
+                        const cycle = cardCycles[t.account];
+                        if (!cycle) return; 
+                        
+                        if (t.type !== 'expense' && t.type !== 'income') return;
 
-                            // 處理跨月邏輯
-                            if (t.isNextCycle) {
-                                effectiveDate.setMonth(effectiveDate.getMonth() + 1);
-                            }
+                        const tDate = new Date(t.timestamp);
+                        let effectiveDate = new Date(tDate);
+                        
+                        if (t.isNextCycle) {
+                            effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+                        }
 
-                            // 判斷是否落在該卡片的當前監控週期內
-                            if (effectiveDate >= cycle.startDate && effectiveDate <= cycle.endDate) {
-                                const val = convertToTWD(t.amount, t.currency);
-                                if (t.type === 'expense') {
-                                    currentMonthCardSpending += val;
-                                } else if (t.type === 'income') {
-                                    // 退刷/回饋金 扣除支出
-                                    currentMonthCardSpending -= val;
-                                }
+                        if (effectiveDate >= cycle.start && effectiveDate <= cycle.end) {
+                            const val = convertToTWD(t.amount, t.currency);
+                            if (t.type === 'expense') {
+                                currentMonthCardSpending += val;
+                            } else if (t.type === 'income') {
+                                currentMonthCardSpending -= val;
                             }
                         }
                     });
-
+                    
                     const budget = convertToTWD(exp.amount, exp.currency);
                     const remaining = budget - currentMonthCardSpending;
                     const isOver = remaining < 0;
                     extraHtml = `
                         <div class="w-full text-xs mt-1 bg-gray-50 p-2 rounded">
                             <div class="flex justify-between mb-1">
-                                <span class="text-gray-500">本月已刷卡 (含跨月)</span>
+                                <span class="text-gray-500">本期已刷卡</span>
                                 <span class="font-bold text-red-500">-${formatCurrency(currentMonthCardSpending, 'TWD')}</span>
                             </div>
                             <div class="flex justify-between border-t border-gray-200 pt-1">
@@ -1690,8 +1754,6 @@
                         </div>
                     `;
                 }
-                // --- 修改結束 ---
-
                 fluidContainer.innerHTML += `
                     <div class="flex flex-col p-2 border-b last:border-b-0 border-base/50 text-base">
                         <div class="flex justify-between items-center w-full">
@@ -1715,6 +1777,13 @@
             const now = new Date();
             const currentYear = now.getFullYear();
             const currentMonth = now.getMonth(); 
+            const todayStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getDate().toString().padStart(2, '0')}`;
+
+            // Add Header with Today's Date
+            const headerDiv = document.createElement('div');
+            headerDiv.className = "mb-2 text-xs text-right text-gray-500 font-medium";
+            headerDiv.innerText = `(今日: ${todayStr})`;
+            container.appendChild(headerDiv);
 
             // 使用 appData.creditCards
             const accountGroups = {};
@@ -1722,6 +1791,11 @@
             appData.creditCards.forEach(card => {
                 let stmtDate = new Date(currentYear, currentMonth, card.billingDay, 23, 59, 59);
                 let startDate = new Date(currentYear, currentMonth - 1, card.billingDay + 1, 0, 0, 0);
+                
+                // 檢查該期帳單是否已自動繳納
+                let payDate = new Date(currentYear, currentMonth, card.paymentDay);
+                const billId = `pb-${card.name}-${payDate.getTime()}`;
+                const isPaid = appData.paidBills && appData.paidBills.some(b => b.id === billId);
 
                 let cardTotal = 0;
                 appData.transactions.forEach(t => {
@@ -1749,19 +1823,26 @@
                         accountGroups[card.linkedAccount] = {
                             total: 0,
                             cards: [],
-                            paymentDay: card.paymentDay 
+                            paymentDay: card.paymentDay,
+                            isFullyPaid: true // 先假設全繳，若有任何一張未繳則為否
                         };
                     }
                     accountGroups[card.linkedAccount].total += cardTotal;
+                    // 如果這張卡沒繳，則整個帳戶群組標記為未全繳 (視覺上可調整，這裡簡單處理)
+                    if (!isPaid) {
+                         accountGroups[card.linkedAccount].isFullyPaid = false; 
+                    }
+                    
                     accountGroups[card.linkedAccount].cards.push({
                         name: card.name,
-                        amount: cardTotal
+                        amount: cardTotal,
+                        isPaid: isPaid
                     });
                 }
             });
 
             if (Object.keys(accountGroups).length === 0) {
-                container.innerHTML = '<p class="text-center text-gray-500 text-xs py-2">本月尚無應繳帳單</p>';
+                container.innerHTML += '<p class="text-center text-gray-500 text-xs py-2">本月尚無應繳帳單</p>';
                 return;
             }
 
@@ -1771,7 +1852,7 @@
                 
                 const cardsHtml = group.cards.map(c => 
                     `<div class="flex justify-between text-xs text-gray-500">
-                        <span>${c.name}</span>
+                        <span>${c.name} ${c.isPaid ? '<span class="text-green-500 ml-1">(已扣繳)</span>' : ''}</span>
                         <span>$${formatCurrency(c.amount, 'TWD')}</span>
                     </div>`
                 ).join('');
@@ -1785,7 +1866,7 @@
                             </div>
                             <div class="text-right">
                                 <span class="text-xs text-gray-500 block">總應繳金額</span>
-                                <span class="font-bold text-red-600 text-lg">TWD ${formatCurrency(group.total, 'TWD')}</span>
+                                <span class="font-bold ${group.isFullyPaid ? 'text-green-600' : 'text-red-600'} text-lg">TWD ${formatCurrency(group.total, 'TWD')}</span>
                             </div>
                         </div>
                         <div class="pl-2 border-l-2 border-base space-y-1 mt-2 pt-2 border-t border-gray-200/50">
@@ -1858,7 +1939,6 @@
             };
             updateCategoryOptions();
         }
-        
         function updateCategoryOptions() {
             const typeSelect = document.getElementById('transaction-type');
             const categorySelect = document.getElementById('transaction-category');
@@ -1925,9 +2005,10 @@
             if (dateInput) dateInput.value = getTodayDateString();
         }
         const transactionForm = document.getElementById('transaction-form');
-        if (transactionForm) {
-            transactionForm.addEventListener('submit', handleTransactionSubmit);
-        }
+        // REMOVED DUPLICATE LISTENER
+        // if (transactionForm) {
+        //     transactionForm.addEventListener('submit', handleTransactionSubmit);
+        // }
         function handleTransactionSubmit(e) {
             e.preventDefault();
             const form = e.target;
@@ -2134,13 +2215,6 @@
             } else if (t.type === 'income') {
                 document.getElementById('edit-category').value = t.name;
             } else if (t.type === 'transfer') {
-                // For transfer, name is usually "轉帳", account is From, toAccount is To.
-                // We map 'category' to From (t.account) and 'subcategory' to To (t.toAccount) in UI logic 
-                // BUT current data structure stores: account=From, toAccount=To. 
-                // Editing transfer accounts via this generic form is tricky.
-                // Let's just allow editing amount/date/note for transfer to be safe, or map strictly.
-                // The prompt asked for modification of category/account.
-                // Let's assume standard expense/income for full editing.
                 document.getElementById('edit-category').value = t.account; // Source
                 document.getElementById('edit-subcategory').value = t.toAccount; // Dest
             }
@@ -2426,27 +2500,22 @@
                 accountMap[card.linkedAccount].cards.push({ ...card, cycleStart: startDate, cycleEnd: endDate, amount: 0 });
             });
             appData.transactions.forEach(t => {
-                if (t.type !== 'expense' && t.type !== 'income') return; // 只處理支出和收入(退刷)
+                if (t.type !== 'expense' && t.type !== 'income') return;
                 const tDate = new Date(t.timestamp);
                 
-                // 1. 先計算「有效日期」 (若勾選延後，月份+1)
+                // 1. 先計算「有效日期」
                 let effectiveDate = new Date(tDate);
-                if (t.isNextCycle) {
-                    effectiveDate.setMonth(effectiveDate.getMonth() + 1);
-                }
+                if (t.isNextCycle) { effectiveDate.setMonth(effectiveDate.getMonth() + 1); }
 
                 for (const accName in accountMap) {
                     const group = accountMap[accName];
                     const matchedCardData = group.cards.find(c => c.name === t.account);
-                    
-                    // 2. 使用「有效日期」來判斷是否屬於該週期
                     if (matchedCardData && effectiveDate >= matchedCardData.cycleStart && effectiveDate <= matchedCardData.cycleEnd) {
                         const val = convertToTWD(t.amount, t.currency);
                         if (t.type === 'expense') {
                             group.totalCardExpense += val;
                             matchedCardData.amount += val;
                         } else if (t.type === 'income') {
-                            // 收入(退刷/回饋金)扣除
                             group.totalCardExpense -= val;
                             matchedCardData.amount -= val;
                         }
@@ -2573,7 +2642,15 @@
             renderJointAccount();
             renderGoalTab();
             checkUrlAndQuickAdd();
+            // 新增：啟動時檢查是否需要自動扣繳
+            checkAndPayBills();
             fetchExchangeRates();
+
+            // Add listener here
+            const tForm = document.getElementById('transaction-form');
+            if (tForm) {
+                tForm.addEventListener('submit', handleTransactionSubmit);
+            }
         };
     </script>
 </body>
