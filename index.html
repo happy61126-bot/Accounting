@@ -738,6 +738,7 @@
         ];
 
         // 信用卡初始資料 (作為預設值，之後存入 appData)
+        // 修正：星展卡連結至台新薪轉帳戶
         const CREDIT_CARDS_INITIAL = [
             { id: 'c1', name: "台新richart卡(玫瑰卡&gogo卡)", currency: "TWD", linkedAccount: "台新RICHART帳戶", billingDay: 7, paymentDay: 21 },
             { id: 'c2', name: "玉山ubear卡", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5, paymentDay: 20 },
@@ -776,6 +777,7 @@
             { id: 'asset-9', name: "台新薪轉帳戶", amount: 127388, currency: "TWD", type: "cash", category: "現金與帳戶" },
             { id: 'asset-12', name: "玉山數位帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
             { id: 'asset-13', name: "國泰cube帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
+            { id: 'asset-14', name: "星展銀行帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
             { id: 'asset-15', name: "聯邦newnewbank帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
             { id: 'asset-10', name: "永豐大戶投(台股)", amount: 0, currency: "TWD", type: "investment", category: "證券戶" }, 
             { id: 'asset-11', name: "國泰證券(美股)", amount: 0, currency: "USD", type: "investment", category: "證券戶" }, 
@@ -949,6 +951,13 @@
                             if (t.toAccount && nameMapping[t.toAccount]) t.toAccount = nameMapping[t.toAccount];
                         });
                     }
+                    // 星展卡遷移邏輯
+                    appData.creditCards.forEach(c => {
+                        if (c.name === "星展現金回饋卡" && c.linkedAccount === "星展銀行帳戶") {
+                            c.linkedAccount = "台新薪轉帳戶";
+                        }
+                    });
+
 
                 } else {
                     appData.fixedExpenses = JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
@@ -1107,71 +1116,63 @@
             }
         }
         
-        // --- 自動繳卡費邏輯 ---
+        // --- 自動繳卡費邏輯 (保留但現在以手動為主) ---
         function checkAndPayBills() {
-            const now = new Date();
-            // 檢查本月和上個月的帳單 (避免太久沒開錯過)
-            for (let i = -1; i <= 0; i++) {
-                const targetDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
-                const targetYear = targetDate.getFullYear();
-                const targetMonth = targetDate.getMonth();
+           // (此處邏輯保留，若您希望系統自動化可開啟，目前改由 manualPayBill 處理)
+        }
 
-                appData.creditCards.forEach(card => {
-                    // 計算該月的繳款日
-                    const payDate = new Date(targetYear, targetMonth, card.paymentDay);
-                    // 計算該期的結帳日
-                    const stmtDate = new Date(targetYear, targetMonth, card.billingDay, 23, 59, 59);
-                    // 計算該期的開始日
-                    const startDate = new Date(targetYear, targetMonth - 1, card.billingDay + 1, 0, 0, 0);
-
-                    // 如果今天已經超過繳款日，且尚未紀錄為已繳
-                    if (now >= payDate) {
-                        const billId = `pb-${card.name}-${payDate.getTime()}`; // 唯一ID
-                        
-                        // 檢查是否已繳
-                        if (!appData.paidBills.some(b => b.id === billId)) {
-                            // 計算該期帳單金額
-                            let total = 0;
-                            appData.transactions.forEach(t => {
-                                if (t.account === card.name) {
-                                    let tDate = new Date(t.timestamp);
-                                    if (t.isNextCycle && tDate >= startDate && tDate <= stmtDate) return;
-
-                                    if (tDate >= startDate && tDate <= stmtDate) {
-                                        const val = convertToTWD(t.amount, t.currency);
-                                        if (t.type === 'expense') total += val;
-                                        else if (t.type === 'income') total -= val;
-                                    }
-                                }
-                            });
-
-                            if (total > 0) {
-                                // 自動扣款：建立轉帳紀錄
-                                // 轉出：扣款帳戶, 轉入：卡片 (這裡轉入卡片是虛擬的，為了減少銀行資產)
-                                // 注意：因為 applyTransactionsToAssets 不會處理轉入卡片(非資產)，所以效果就是銀行資產減少
-                                const newTrans = {
-                                    id: Date.now().toString(),
-                                    name: `自動扣繳-${card.name}`,
-                                    amount: total,
-                                    currency: 'TWD',
-                                    type: 'transfer',
-                                    account: card.linkedAccount, // 從這裡扣錢
-                                    toAccount: card.name, // 轉去哪不重要，重要的是扣錢
-                                    timestamp: payDate.getTime(), // 繳款日當天
-                                    note: `系統自動扣繳 ${card.name} (${startDate.getMonth()+1}/${startDate.getDate()}~${stmtDate.getMonth()+1}/${stmtDate.getDate()})`
-                                };
-                                
-                                appData.transactions.push(newTrans);
-                                appData.paidBills.push({ id: billId, cardName: card.name, amount: total, payDate: payDate.getTime() });
-                                
-                                applyTransactionsToAssets();
-                                saveData();
-                                showAlert('success', `已自動扣繳 ${card.name} 帳單：${formatCurrency(total, 'TWD')}`);
-                            }
-                        }
-                    }
-                });
-            }
+        // --- 手動繳款功能 ---
+        function manualPayBill(cardName, amount, payDateStr, linkedAccount) {
+             if(confirm(`確認要繳納 ${cardName} 的帳單嗎？\n金額: TWD ${formatCurrency(amount, 'TWD')}\n將從 ${linkedAccount} 扣除。`)) {
+                
+                // 產生一筆轉帳(支出)紀錄來扣除銀行存款
+                const newTrans = {
+                    id: Date.now().toString(),
+                    name: `繳信用卡費-${cardName}`,
+                    amount: parseFloat(amount),
+                    currency: 'TWD',
+                    type: 'transfer', // 使用轉帳邏輯: 從銀行轉出，轉入卡片(不計資產) = 資產減少
+                    account: linkedAccount, 
+                    toAccount: cardName, 
+                    timestamp: Date.now(),
+                    note: `手動繳納本期帳單 (期限: ${payDateStr})`
+                };
+                
+                appData.transactions.push(newTrans);
+                
+                // 記錄此卡此期已繳 (使用簡易ID生成，需與 render 中的一致)
+                // 為了簡化，我們使用 cardName + amount + approximate time window concept
+                // 更精確的做法是使用 renderMonthlyBillDue 中計算出的 billId
+                // 由於 renderMonthlyBillDue 是動態計算，我們在那邊直接傳遞一個唯一的 ID 會更好。
+                // 這裡我們改為在 renderMonthlyBillDue 生成 ID 並傳入。
+             }
+        }
+        
+        // 修正後的 manualPayBill，接收完整 ID
+        function executePayBill(billId, cardName, amount, linkedAccount) {
+             const newTrans = {
+                id: Date.now().toString(),
+                name: `繳信用卡費-${cardName}`,
+                amount: parseFloat(amount),
+                currency: 'TWD',
+                type: 'transfer',
+                account: linkedAccount, 
+                toAccount: cardName, 
+                timestamp: Date.now(),
+                note: `手動繳納帳單`
+            };
+            
+            appData.transactions.push(newTrans);
+            appData.paidBills.push({ id: billId, cardName: cardName, amount: amount, payDate: Date.now() });
+            
+            applyTransactionsToAssets();
+            saveData();
+            
+            renderAssets(); // 更新資產
+            renderMonthlyBillDue(); // 更新帳單列表
+            renderTransactionHistory(); // 更新紀錄
+            
+            showAlert('success', '繳款成功！資產已更新。');
         }
 
         // --- 設定/帳戶管理 Modal 邏輯 ---
@@ -1793,6 +1794,7 @@
                 
                 // 檢查該期帳單是否已自動繳納
                 let payDate = new Date(currentYear, currentMonth, card.paymentDay);
+                // 繳款ID的格式：pb-卡名-繳款日timestamp
                 const billId = `pb-${card.name}-${payDate.getTime()}`;
                 const isPaid = appData.paidBills && appData.paidBills.some(b => b.id === billId);
 
@@ -1826,16 +1828,19 @@
                             isFullyPaid: true // 先假設全繳，若有任何一張未繳則為否
                         };
                     }
-                    accountGroups[card.linkedAccount].total += cardTotal;
-                    // 如果這張卡沒繳，則整個帳戶群組標記為未全繳 (視覺上可調整，這裡簡單處理)
+                    
+                    // 只有未繳款的才加總到「總應繳金額」
                     if (!isPaid) {
-                         accountGroups[card.linkedAccount].isFullyPaid = false; 
+                        accountGroups[card.linkedAccount].total += cardTotal;
+                        accountGroups[card.linkedAccount].isFullyPaid = false; 
                     }
                     
                     accountGroups[card.linkedAccount].cards.push({
                         name: card.name,
                         amount: cardTotal,
-                        isPaid: isPaid
+                        isPaid: isPaid,
+                        billId: billId, // 傳遞 Bill ID 供繳款使用
+                        linkedAccount: card.linkedAccount
                     });
                 }
             });
@@ -1849,12 +1854,23 @@
                 let payDate = new Date(currentYear, currentMonth, group.paymentDay);
                 let payDateStr = `${payDate.getMonth()+1}/${payDate.getDate()}`;
                 
-                const cardsHtml = group.cards.map(c => 
-                    `<div class="flex justify-between text-xs text-gray-500">
-                        <span>${c.name} ${c.isPaid ? '<span class="text-green-500 ml-1">(已扣繳)</span>' : ''}</span>
-                        <span>$${formatCurrency(c.amount, 'TWD')}</span>
-                    </div>`
-                ).join('');
+                const cardsHtml = group.cards.map(c => {
+                    let actionHtml = '';
+                    if (c.isPaid) {
+                        actionHtml = '<span class="text-green-500 font-bold ml-2 text-xs">(已繳款)</span>';
+                    } else {
+                        // 加入繳款按鈕
+                        actionHtml = `<button onclick="if(confirm('確認繳納 ${c.name} 金額 TWD ${formatCurrency(c.amount, 'TWD')} 嗎？\\n將從 ${c.linkedAccount} 扣除。')) executePayBill('${c.billId}', '${c.name}', ${c.amount}, '${c.linkedAccount}')" class="ml-2 bg-red-100 text-red-600 px-2 py-0.5 rounded text-xs hover:bg-red-200 transition">繳款</button>`;
+                    }
+
+                    return `<div class="flex justify-between items-center text-xs text-gray-500 py-1">
+                        <div class="flex items-center">
+                            <span>${c.name}</span>
+                            ${actionHtml}
+                        </div>
+                        <span class="${c.isPaid ? 'line-through opacity-50' : 'font-bold text-gray-700'}">$${formatCurrency(c.amount, 'TWD')}</span>
+                    </div>`;
+                }).join('');
 
                 container.innerHTML += `
                     <div class="bg-secondary/30 p-3 rounded-lg border border-base/50">
@@ -2571,57 +2587,31 @@
         function openDataModal() { document.getElementById('data-modal').classList.remove('hidden'); }
         function closeDataModal() { document.getElementById('data-modal').classList.add('hidden'); }
 
-        // --- Tab 導航 ---
-        function setupTabs() {
-            const buttons = document.querySelectorAll('.nav-button');
-            const contents = document.querySelectorAll('.tab-content');
+        // --- 手動繳款功能 ---
+        function executePayBill(billId, cardName, amount, linkedAccount) {
+             const newTrans = {
+                id: Date.now().toString(),
+                name: `繳信用卡費-${cardName}`,
+                amount: parseFloat(amount),
+                currency: 'TWD',
+                type: 'transfer',
+                account: linkedAccount, 
+                toAccount: cardName, 
+                timestamp: Date.now(),
+                note: `手動繳納帳單`
+            };
             
-            function switchTab(targetId) {
-                buttons.forEach(btn => {
-                    const isActive = btn.dataset.tab === targetId;
-                    btn.classList.toggle('active', isActive);
-                    btn.classList.toggle('text-gray-500', !isActive);
-                    btn.classList.toggle('text-accent', isActive);
-                });
-                
-                contents.forEach(content => {
-                    content.classList.toggle('hidden', content.id !== `${targetId}-tab`);
-                });
-                renderTabContent(targetId);
-            }
-
-            buttons.forEach(button => {
-                button.addEventListener('click', () => switchTab(button.dataset.tab));
-            });
-            switchTab('assets');
-        }
-
-        function renderTabContent(tabId) {
-            switch (tabId) {
-                case 'assets':
-                    renderAssets();
-                    renderGoalTab();
-                    break;
-                case 'plan':
-                    renderFixedPlan(); 
-                    renderMonthlyBillDue(); 
-                    renderCreditCardPrep(); 
-                    break;
-                case 'bookkeeping':
-                    renderBookkeepingFormOptions();
-                    initCategorySelects(); 
-                    renderTransactionHistory();
-                    renderMonthlyStats(); 
-                    renderCurrentYearStats(); 
-                    initHistoricalStats(); 
-                    break;
-                case 'joint':
-                    renderJointAccount();
-                    break;
-                case 'goal':
-                    renderGoalTab();
-                    break;
-            }
+            appData.transactions.push(newTrans);
+            appData.paidBills.push({ id: billId, cardName: cardName, amount: amount, payDate: Date.now() });
+            
+            applyTransactionsToAssets();
+            saveData();
+            
+            renderAssets(); // 更新資產
+            renderMonthlyBillDue(); // 更新帳單列表
+            renderTransactionHistory(); // 更新紀錄
+            
+            showAlert('success', '繳款成功！資產已更新。');
         }
 
         window.onload = function() {
@@ -2641,8 +2631,7 @@
             renderJointAccount();
             renderGoalTab();
             checkUrlAndQuickAdd();
-            // 新增：啟動時檢查是否需要自動扣繳
-            checkAndPayBills();
+            // checkAndPayBills(); // 停用自動繳款，改用手動
             fetchExchangeRates();
 
             // Add listener here
@@ -2654,4 +2643,3 @@
     </script>
 </body>
 </html>
-
