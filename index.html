@@ -671,6 +671,13 @@
                         </div>
                     </div>
                     
+                    <!-- 新增：實際交割金額 -->
+                    <div class="mt-2">
+                        <label class="block text-sm text-gray-600">實際交割金額 (含手續費/稅)</label>
+                        <input type="number" id="trade-settlement-amount" class="w-full p-2 border rounded-lg font-bold text-accent" step="any" placeholder="銀行實際扣款/入帳金額" required>
+                        <p class="text-[10px] text-gray-400 mt-1">* 系統將依此金額自動新增記帳紀錄並更新帳戶餘額</p>
+                    </div>
+                    
                     <button type="submit" class="w-full bg-primary text-white py-2 rounded-xl font-bold hover:bg-primary/90 mt-4">
                         確認交易
                     </button>
@@ -736,9 +743,15 @@
             'accordion-現金與帳戶',
             'accordion-證券戶'
         ];
+        
+        // 新增：券商與交割銀行對照表
+        const BROKERAGE_LINK_MAP = {
+            "永豐大戶投(台股)": "永豐大戶銀行帳戶",
+            "國泰證券(美股)": "國泰外幣帳戶",
+            "國泰證券(台股)": "國泰cube帳戶"
+        };
 
         // 信用卡初始資料 (作為預設值，之後存入 appData)
-        // 修正：星展卡連結至台新薪轉帳戶
         const CREDIT_CARDS_INITIAL = [
             { id: 'c1', name: "台新richart卡(玫瑰卡&gogo卡)", currency: "TWD", linkedAccount: "台新RICHART帳戶", billingDay: 7, paymentDay: 21 },
             { id: 'c2', name: "玉山ubear卡", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5, paymentDay: 20 },
@@ -756,12 +769,13 @@
             "個人": ["電話費", "捐款", "寵物", "保險", "其他"],
             "醫療": ["門診", "藥品", "醫療用品", "打針", "健康檢查", "其他"],
             "美容美髮": ["用頭髮", "按摩", "其他"],
-            "家庭": ["孝親費", "懷孕相關", "小孩相關", "其他"]
+            "家庭": ["孝親費", "懷孕相關", "小孩相關", "其他"],
+            "投資": ["股票交割", "基金扣款", "其他"] // 新增投資分類
         };
 
         // 記帳分類 (收入) - 新增 "退刷", "回饋金"
         const INCOME_CATEGORIES_LIST = [
-            "薪水", "獎金", "韵禾苑", "還款", "股利", "交易", "利息", "退款", "隊友貢獻", "退刷", "回饋金", "其他"
+            "薪水", "獎金", "韵禾苑", "還款", "股利", "交易", "利息", "退款", "隊友貢獻", "退刷", "回饋金", "投資", "其他"
         ];
 
         // 帳戶初始資料 (作為預設值)
@@ -1495,9 +1509,11 @@
             const action = document.getElementById('trade-action').value;
             const shares = parseFloat(document.getElementById('trade-shares').value);
             const price = parseFloat(document.getElementById('trade-price').value);
+            // 新增：讀取交割金額
+            const settlementAmount = parseFloat(document.getElementById('trade-settlement-amount').value);
 
-            if (shares <= 0 || price <= 0) {
-                showAlert('warning', '股數與價格必須大於0');
+            if (shares <= 0 || price <= 0 || isNaN(settlementAmount) || settlementAmount < 0) {
+                showAlert('warning', '請輸入有效的股數、單價與交割金額');
                 return;
             }
 
@@ -1508,15 +1524,41 @@
                 showAlert('warning', '請選擇股票');
                 return;
             }
+            
+            // 查找交割銀行帳戶
+            const linkedBankAccount = BROKERAGE_LINK_MAP[stock.account];
+            if (!linkedBankAccount) {
+                showAlert('danger', `無法找到對應的交割銀行帳戶 (${stock.account})`);
+                return;
+            }
 
             if (action === 'buy') {
+                // 更新庫存成本邏輯：新成本 = (舊總成本 + 本次實際交割金額) / 新總股數
                 const totalCostOld = stock.shares * stock.cost;
-                const totalCostNew = shares * price;
                 const newTotalShares = stock.shares + shares;
-                stock.cost = (totalCostOld + totalCostNew) / newTotalShares;
+                
+                // 注意：這裡使用使用者輸入的「實際交割金額」來計算新成本，而非 price * shares
+                // 這樣能把手續費、稅金等成本正確攤平到每股成本中
+                const newCostBasis = (totalCostOld + settlementAmount) / newTotalShares;
+                
+                stock.cost = newCostBasis;
                 stock.shares = newTotalShares;
                 stock.currentPrice = price; 
-                showAlert('success', `已加碼 ${stock.name} ${shares}股`);
+                
+                // 自動記帳：支出
+                const newTrans = {
+                    id: Date.now().toString(),
+                    name: `買入股票-${stock.name}`,
+                    amount: settlementAmount,
+                    currency: stock.currency, // 使用股票幣別 (TWD/USD)
+                    type: 'expense',
+                    account: linkedBankAccount, // 從交割戶扣款
+                    timestamp: Date.now(),
+                    note: `買入 ${stock.name} ${shares}股 @${price}, 實付 ${settlementAmount}`
+                };
+                appData.transactions.push(newTrans);
+                
+                showAlert('success', `已買入 ${stock.name}，並自動記帳扣款。`);
 
             } else if (action === 'sell') {
                 if (shares > stock.shares) {
@@ -1526,16 +1568,30 @@
                 stock.shares -= shares;
                 stock.currentPrice = price;
                 
+                // 自動記帳：收入
+                const newTrans = {
+                    id: Date.now().toString(),
+                    name: `賣出股票-${stock.name}`,
+                    amount: settlementAmount,
+                    currency: stock.currency,
+                    type: 'income',
+                    account: linkedBankAccount, // 入帳到交割戶
+                    timestamp: Date.now(),
+                    note: `賣出 ${stock.name} ${shares}股 @${price}, 實收 ${settlementAmount}`
+                };
+                appData.transactions.push(newTrans);
+                
                 if (stock.shares === 0) {
-                     showAlert('info', `${stock.name} 已全數賣出`);
+                     showAlert('info', `${stock.name} 已全數賣出，並自動記帳入款。`);
                 } else {
-                     showAlert('success', `已賣出 ${stock.name} ${shares}股`);
+                     showAlert('success', `已賣出 ${stock.name}，並自動記帳入款。`);
                 }
             }
             
             applyTransactionsToAssets();
             saveData();
-            renderAssets();
+            renderAssets(); // 更新資產顯示
+            renderTransactionHistory(); // 更新記帳列表
             renderGoalTab();
             closeStockModal();
             e.target.reset();
@@ -1803,12 +1859,14 @@
                     if (t.account === card.name) {
                         let tDate = new Date(t.timestamp);
                         
-                        // 計算邏輯：如果是跨月交易 (isNextCycle)，則視為下一期，不計入本期
-                        if (t.isNextCycle && tDate >= startDate && tDate <= stmtDate) {
-                            return; 
+                        // 修改：計算邏輯引入有效日期 (Effective Date)
+                        // 若勾選跨月 (isNextCycle)，將日期視為下個月，看是否落入本期區間
+                        let effectiveDate = new Date(tDate);
+                        if (t.isNextCycle) {
+                            effectiveDate.setMonth(effectiveDate.getMonth() + 1);
                         }
 
-                        if (tDate >= startDate && tDate <= stmtDate) {
+                        if (effectiveDate >= startDate && effectiveDate <= stmtDate) {
                             const val = convertToTWD(t.amount, t.currency);
                             if (t.type === 'expense') {
                                 cardTotal += val;
