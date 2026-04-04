@@ -174,12 +174,12 @@
                     <!-- Fluid expenses will be rendered here -->
                 </div>
 
-                <!-- 本月信用卡應繳金額 -->
+                <!-- 信用卡應繳金額 -->
                 <div class="bg-white p-4 rounded-xl shadow-lg mb-6 border border-base">
                     <button class="w-full flex justify-between items-center pb-2 border-b border-base focus:outline-none" onclick="toggleAccordion('bill-due-content')">
                         <div class="flex items-center">
                              <h3 class="text-lg font-serif-tc font-bold text-primary">
-                                <i class="fas fa-file-invoice-dollar text-accent mr-2"></i>本月信用卡應繳金額
+                                <i class="fas fa-file-invoice-dollar text-accent mr-2"></i>信用卡應繳金額
                             </h3>
                             <span class="ml-2 text-xs text-white bg-red-500 px-2 py-1 rounded-full">需繳款</span>
                         </div>
@@ -187,6 +187,11 @@
                     </button>
                     
                     <div id="bill-due-content" class="hidden mt-4 space-y-2">
+                        <div class="flex justify-end mb-2">
+                            <select id="bill-month-select" class="p-1 border rounded text-sm bg-gray-50 focus:ring-accent focus:border-accent" onchange="renderMonthlyBillDue()">
+                                <!-- Options populated by JS -->
+                            </select>
+                        </div>
                         <div id="bill-due-list" class="space-y-3">
                             <!-- Content populated by JS -->
                         </div>
@@ -1830,19 +1835,43 @@
         
         function renderMonthlyBillDue() {
             const container = document.getElementById('bill-due-list');
+            const monthSelect = document.getElementById('bill-month-select');
             if(!container) return;
-            container.innerHTML = '';
             
             const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth(); 
-            const todayStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getDate().toString().padStart(2, '0')}`;
+            let currentYear = now.getFullYear();
+            let currentMonth = now.getMonth(); 
 
+            if (monthSelect) {
+                if (monthSelect.options.length === 0) {
+                    for (let i = 0; i < 12; i++) {
+                        let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                        monthSelect.add(new Option(`${d.getFullYear()}年${d.getMonth() + 1}月`, `${d.getFullYear()}-${d.getMonth()}`));
+                    }
+                }
+                if (monthSelect.value) {
+                    const parts = monthSelect.value.split('-');
+                    currentYear = parseInt(parts[0]);
+                    currentMonth = parseInt(parts[1]);
+                }
+            }
+
+            container.innerHTML = '';
+            
+            let titleStr = '';
+            if (currentYear === now.getFullYear() && currentMonth === now.getMonth()) {
+                titleStr = `(今日: ${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getDate().toString().padStart(2, '0')})`;
+            } else {
+                titleStr = `(${currentYear}年${currentMonth+1}月 帳單)`;
+            }
+
+            // Add Header with Date Info
             const headerDiv = document.createElement('div');
             headerDiv.className = "mb-2 text-xs text-right text-gray-500 font-medium";
-            headerDiv.innerText = `(今日: ${todayStr})`;
+            headerDiv.innerText = titleStr;
             container.appendChild(headerDiv);
 
+            // 使用 appData.creditCards
             const accountGroups = {};
 
             appData.creditCards.forEach(card => {
@@ -1893,14 +1922,14 @@
                         name: card.name,
                         amount: cardTotal,
                         isPaid: isPaid,
-                        billId: billId, 
+                        billId: billId, // 傳遞 Bill ID 供繳款使用
                         linkedAccount: card.linkedAccount
                     });
                 }
             });
 
             if (Object.keys(accountGroups).length === 0) {
-                container.innerHTML += '<p class="text-center text-gray-500 text-xs py-2">本月尚無應繳帳單</p>';
+                container.innerHTML += '<p class="text-center text-gray-500 text-xs py-2">該月尚無應繳帳單</p>';
                 return;
             }
 
