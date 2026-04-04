@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 載入 Font Awesome CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <!-- 載入 Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- 載入 Google Fonts (Noto Serif TC for titles, Noto Sans TC for body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -310,11 +312,26 @@
                         </div>
                         
                         <!-- 新增：歷史紀錄篩選器 -->
-                        <div class="flex items-center space-x-2">
-                             <i class="fas fa-filter text-gray-400 text-sm"></i>
+                        <div class="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                             <i class="fas fa-filter text-gray-400 text-sm hidden sm:block"></i>
                              <select id="history-filter-account" class="w-full p-2 text-sm border rounded-lg bg-white focus:border-accent focus:ring-accent" onchange="renderTransactionHistory()">
                                  <option value="all">顯示全部帳戶/卡片</option>
                                  <!-- Populated by JS -->
+                             </select>
+                             <select id="history-filter-month" class="w-full p-2 text-sm border rounded-lg bg-white focus:border-accent focus:ring-accent" onchange="renderTransactionHistory()">
+                                 <option value="all">全部月份</option>
+                                 <option value="0">1月</option>
+                                 <option value="1">2月</option>
+                                 <option value="2">3月</option>
+                                 <option value="3">4月</option>
+                                 <option value="4">5月</option>
+                                 <option value="5">6月</option>
+                                 <option value="6">7月</option>
+                                 <option value="7">8月</option>
+                                 <option value="8">9月</option>
+                                 <option value="9">10月</option>
+                                 <option value="10">11月</option>
+                                 <option value="11">12月</option>
                              </select>
                         </div>
                     </div>
@@ -359,7 +376,7 @@
                 <!-- 本年度每月支出/收入統計 -->
                 <h3 class="text-xl font-serif-tc font-semibold mb-3 border-b pb-2 border-base mt-8">本年度每月支出/收入統計</h3>
                 <div class="bg-white p-4 rounded-xl shadow-lg border border-base">
-                     <p class="text-sm text-gray-500 font-medium mb-3 text-right">統計週期：自然月 (每月1號~月底)</p>
+                     <p class="text-sm text-gray-500 font-medium mb-3 text-right">統計週期：每月5號~下個月4號</p>
                      <div id="yearly-stats-container" class="space-y-3">
                          <!-- Yearly stats populated by JS -->
                      </div>
@@ -377,6 +394,25 @@
                      <div id="history-year-stats-container" class="space-y-3">
                          <p class="text-center text-gray-500 py-4">請選擇年度以查看統計</p>
                      </div>
+                </div>
+                
+                <!-- 消費分析 -->
+                <h3 class="text-xl font-serif-tc font-semibold mb-3 border-b pb-2 border-base mt-8">消費分析</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white p-4 rounded-xl shadow-lg border border-base flex flex-col items-center">
+                        <h4 class="font-bold text-primary mb-2 text-center">本月消費分析</h4>
+                        <p class="text-xs text-gray-500 mb-2">(每月5號~下個月4號)</p>
+                        <div class="w-full relative" style="height: 250px;">
+                            <canvas id="monthly-pie-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-lg border border-base flex flex-col items-center">
+                        <h4 class="font-bold text-primary mb-2 text-center">本年度消費分析</h4>
+                        <p class="text-xs text-gray-500 mb-2">(以每月5號結算週期計算)</p>
+                        <div class="w-full relative" style="height: 250px;">
+                            <canvas id="yearly-pie-chart"></canvas>
+                        </div>
+                    </div>
                 </div>
 
             </section>
@@ -1162,10 +1198,11 @@
                 case 'bookkeeping':
                     renderBookkeepingFormOptions();
                     initCategorySelects(); 
-                    renderTransactionHistory(); // 確保篩選器初始化
+                    renderTransactionHistory(); 
                     renderMonthlyStats(); 
                     renderCurrentYearStats(); 
                     initHistoricalStats(); 
+                    renderExpensePieCharts();
                     break;
                 case 'joint':
                     renderJointAccount();
@@ -1989,6 +2026,7 @@
             select.appendChild(groupAccounts);
             const groupCards = document.createElement('optgroup');
             groupCards.label = "信用卡";
+            // 使用 appData.creditCards
             appData.creditCards.forEach(card => {
                 const option = document.createElement('option');
                 option.value = card.name;
@@ -2238,11 +2276,13 @@
             renderCreditCardPrep();
             renderMonthlyBillDue(); // 更新本月帳單
             renderFixedPlan(); 
+            renderExpensePieCharts();
         }
         function renderTransactionHistory() {
             const historyList = document.getElementById('transaction-history');
             const loadMoreBtn = document.getElementById('load-more-container');
-            const filterValue = document.getElementById('history-filter-account') ? document.getElementById('history-filter-account').value : 'all';
+            const filterAccount = document.getElementById('history-filter-account') ? document.getElementById('history-filter-account').value : 'all';
+            const filterMonth = document.getElementById('history-filter-month') ? document.getElementById('history-filter-month').value : 'all';
             
             historyList.innerHTML = '';
             if (appData.transactions.length === 0) {
@@ -2253,8 +2293,32 @@
             
             // Filter
             let filteredTransactions = appData.transactions;
-            if (filterValue !== 'all') {
-                filteredTransactions = appData.transactions.filter(t => t.account === filterValue || t.toAccount === filterValue);
+            if (filterAccount !== 'all') {
+                filteredTransactions = filteredTransactions.filter(t => t.account === filterAccount || t.toAccount === filterAccount);
+            }
+
+            if (filterMonth !== 'all') {
+                const targetMonth = parseInt(filterMonth);
+                filteredTransactions = filteredTransactions.filter(t => {
+                    let effDate = new Date(t.timestamp);
+                    const isCard = checkIsCreditCard(t.account);
+                    
+                    if (isCard && filterAccount === t.account) {
+                        if (t.isNextCycle) {
+                            effDate.setMonth(effDate.getMonth() + 1);
+                        }
+                        const card = appData.creditCards.find(c => c.name === t.account);
+                        const bd = card.billingDay;
+                        let cycleMonth = effDate.getMonth();
+                        if (effDate.getDate() < bd) {
+                            cycleMonth -= 1;
+                            if (cycleMonth < 0) cycleMonth = 11;
+                        }
+                        return cycleMonth === targetMonth;
+                    } else {
+                        return effDate.getMonth() === targetMonth;
+                    }
+                });
             }
             
             const sortedTransactions = [...filteredTransactions].sort((a, b) => b.timestamp - a.timestamp);
@@ -2265,7 +2329,7 @@
                  historyList.innerHTML = '<li class="text-center text-gray-500 p-4">沒有符合條件的紀錄</li>';
             }
 
-            historyList.innerHTML = transactionsToShow.map(t => {
+            historyList.innerHTML += transactionsToShow.map(t => {
                 let color, sign, icon, displayAccount;
                 if (t.type === 'expense' || t.type === 'investment_expense') {
                     color = 'text-red-600'; sign = '-'; icon = 'fa-arrow-circle-down'; displayAccount = t.account;
@@ -2476,6 +2540,7 @@
             renderCreditCardPrep(); 
             renderMonthlyBillDue(); 
             renderFixedPlan();
+            renderExpensePieCharts();
             closeEditModal(); 
             showAlert('success', '紀錄修改成功！');
         });
@@ -2487,7 +2552,7 @@
                 const index = appData.transactions.findIndex(t => t.id === transactionToDeleteId);
                 if (index > -1) {
                     appData.transactions.splice(index, 1);
-                    applyTransactionsToAssets(); saveData(); renderTransactionHistory(); renderAssets(); renderJointAccount(); renderGoalTab(); renderMonthlyStats(); renderCurrentYearStats(); renderCreditCardPrep(); renderMonthlyBillDue(); renderFixedPlan();
+                    applyTransactionsToAssets(); saveData(); renderTransactionHistory(); renderAssets(); renderJointAccount(); renderGoalTab(); renderMonthlyStats(); renderCurrentYearStats(); renderCreditCardPrep(); renderMonthlyBillDue(); renderFixedPlan(); renderExpensePieCharts();
                 }
                 closeDeleteModal(); showAlert('info', '記帳記錄已刪除。');
             }
@@ -2545,12 +2610,18 @@
             appData.transactions.forEach(t => {
                 if (t.type === 'transfer' || t.account === '共同帳戶') return;
                 const date = new Date(t.timestamp);
-                if (date.getFullYear() === parseInt(year)) {
-                    const monthIndex = date.getMonth();
+                let m = date.getMonth();
+                let y = date.getFullYear();
+                if (date.getDate() < 5) {
+                    m -= 1;
+                    if (m < 0) { m = 11; y -= 1; }
+                }
+                
+                if (y === parseInt(year)) {
                     const amountTWD = convertToTWD(t.amount, t.currency);
                     // 排除投資
-                    if (t.type === 'income') monthlyData[monthIndex].income += amountTWD;
-                    else if (t.type === 'expense') monthlyData[monthIndex].expense += amountTWD;
+                    if (t.type === 'income') monthlyData[m].income += amountTWD;
+                    else if (t.type === 'expense') monthlyData[m].expense += amountTWD;
                 }
             });
             return monthlyData;
@@ -2586,7 +2657,14 @@
         function initHistoricalStats() {
             const select = document.getElementById('history-year-select');
             const years = new Set();
-            appData.transactions.forEach(t => years.add(new Date(t.timestamp).getFullYear()));
+            appData.transactions.forEach(t => {
+                const d = new Date(t.timestamp);
+                let y = d.getFullYear();
+                if (d.getDate() < 5) {
+                    if (d.getMonth() === 0) y -= 1;
+                }
+                years.add(y);
+            });
             years.add(new Date().getFullYear());
             const sortedYears = Array.from(years).sort((a, b) => b - a);
             select.innerHTML = '<option value="" disabled selected>請選擇</option>';
@@ -2607,6 +2685,79 @@
             });
             if(!hasData) container.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">該年度無紀錄</p>';
         }
+        
+        let monthlyChartInstance = null;
+        let yearlyChartInstance = null;
+
+        function renderExpensePieCharts() {
+            const ctxMonthly = document.getElementById('monthly-pie-chart');
+            const ctxYearly = document.getElementById('yearly-pie-chart');
+            if (!ctxMonthly || !ctxYearly) return;
+
+            const { startDate: mStart, endDate: mEnd } = getCurrentFinancialMonthRange(); 
+            const currentYear = new Date().getFullYear();
+
+            const monthlyCategories = {};
+            const yearlyCategories = {};
+
+            appData.transactions.forEach(t => {
+                if (t.type !== 'expense' || t.account === '共同帳戶' || t.name.startsWith('投資')) return;
+
+                const tDate = new Date(t.timestamp);
+                const amountTWD = convertToTWD(t.amount, t.currency);
+
+                // Monthly
+                if (tDate >= mStart && tDate <= mEnd) {
+                    const cat = t.name.split('-')[0] || '其他';
+                    monthlyCategories[cat] = (monthlyCategories[cat] || 0) + amountTWD;
+                }
+
+                // Yearly (Financial logic)
+                let y = tDate.getFullYear();
+                let m = tDate.getMonth();
+                if (tDate.getDate() < 5) {
+                    m -= 1;
+                    if (m < 0) { m = 11; y -= 1; }
+                }
+                if (y === currentYear) {
+                    const cat = t.name.split('-')[0] || '其他';
+                    yearlyCategories[cat] = (yearlyCategories[cat] || 0) + amountTWD;
+                }
+            });
+
+            const generateChartData = (dataObj) => {
+                const labels = Object.keys(dataObj);
+                const data = Object.values(dataObj);
+                const bgColors = ['#A88F78', '#8E7D70', '#C3B5A6', '#D6CFC4', '#9A8E85', '#7D6F64', '#B4A698', '#E2DCD3', '#665C53', '#CBBFB1'];
+                return {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: bgColors.slice(0, Math.max(labels.length, bgColors.length)),
+                        borderWidth: 1,
+                        borderColor: '#fff'
+                    }]
+                };
+            };
+
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { font: { family: 'Noto Sans TC' } } },
+                    tooltip: { callbacks: { label: function(context) {
+                        return ' TWD ' + formatCurrency(context.raw, 'TWD');
+                    }}}
+                }
+            };
+
+            if (monthlyChartInstance) monthlyChartInstance.destroy();
+            monthlyChartInstance = new Chart(ctxMonthly, { type: 'pie', data: generateChartData(monthlyCategories), options: commonOptions });
+
+            if (yearlyChartInstance) yearlyChartInstance.destroy();
+            yearlyChartInstance = new Chart(ctxYearly, { type: 'pie', data: generateChartData(yearlyCategories), options: commonOptions });
+        }
+        
         function renderGoalTab() {
             const totalAssetTWD = calculateTotalAsset(); 
             const difference = GOAL_AMOUNT - totalAssetTWD;
@@ -2747,7 +2898,7 @@
                     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json));
                     // Reload data
                     loadData();
-                    renderAssets(); renderFixedPlan(); renderCreditCardPrep(); renderMonthlyBillDue(); renderTransactionHistory(); renderMonthlyStats(); renderCurrentYearStats(); initHistoricalStats(); renderJointAccount(); renderGoalTab();
+                    renderAssets(); renderFixedPlan(); renderCreditCardPrep(); renderMonthlyBillDue(); renderTransactionHistory(); renderMonthlyStats(); renderCurrentYearStats(); initHistoricalStats(); renderJointAccount(); renderGoalTab(); renderExpensePieCharts();
                     showAlert('success', '資料匯入成功！已更新畫面。');
                 } catch (err) { console.error(err); showAlert('danger', '匯入失敗：檔案格式錯誤'); }
                 input.value = '';
