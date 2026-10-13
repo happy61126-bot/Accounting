@@ -846,6 +846,223 @@
         </div>
     </div>
 
+    <!-- 自動更新股價設定 Modal -->
+    <div id="stock-auto-modal" class="modal fixed inset-0 z-[60] flex items-end sm:items-center justify-center hidden">
+        <div class="modal-backdrop absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeStockAutoModal()"></div>
+        <div class="modal-panel sm:max-w-lg">
+            <div class="modal-head">
+                <h3 class="text-lg font-bold text-primary flex items-center gap-2"><i class="fas fa-wand-magic-sparkles text-accent"></i>設定自動更新股價</h3>
+                <button class="icon-btn" onclick="closeStockAutoModal()" aria-label="關閉"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="px-5 pb-6 pb-safe space-y-4">
+                <p class="text-sm text-gray-500">透過你自己 Google 帳號裡的小程式查詢股價（約延遲 20 分鐘）。只需設定一次，之後新增或賣出股票都不用再改。<b class="text-primary">建議用電腦設定</b>，手機操作 Google 編輯器比較不方便。</p>
+
+                <ol class="space-y-3 text-sm">
+                    <li class="flex gap-3">
+                        <span class="w-6 h-6 rounded-full bg-accent text-white text-xs font-bold grid place-items-center shrink-0">1</span>
+                        <div class="min-w-0 flex-1">
+                            <p class="font-bold text-primary">複製小程式碼</p>
+                            <div class="flex gap-2 mt-2">
+                                <button type="button" onclick="copyGasCode()" class="btn-accent !h-10 text-sm flex-1"><i class="fas fa-copy"></i>複製程式碼</button>
+                                <button type="button" onclick="document.getElementById('gas-code-view').classList.toggle('hidden')" class="btn-ghost !h-10 text-sm">顯示</button>
+                            </div>
+                            <textarea id="gas-code-view" readonly class="hidden mt-2 w-full h-40 p-2 text-[11px] font-mono rounded-lg border border-line bg-secondary/60" onfocus="this.select()"></textarea>
+                        </div>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="w-6 h-6 rounded-full bg-accent text-white text-xs font-bold grid place-items-center shrink-0">2</span>
+                        <div class="min-w-0 flex-1">
+                            <p class="font-bold text-primary">建立試算表並貼上</p>
+                            <p class="text-gray-500 mt-0.5">開一個新的 Google 試算表（<a href="https://sheets.new" target="_blank" rel="noopener" class="text-accent underline">sheets.new</a>）→ 上方「擴充功能」→「Apps Script」→ 刪掉原本內容、貼上程式碼 → 按儲存。</p>
+                        </div>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="w-6 h-6 rounded-full bg-accent text-white text-xs font-bold grid place-items-center shrink-0">3</span>
+                        <div class="min-w-0 flex-1">
+                            <p class="font-bold text-primary">部署成網頁應用程式</p>
+                            <p class="text-gray-500 mt-0.5">右上「部署」→「新增部署作業」→ 齒輪選「網頁應用程式」→ 執行身分「我」、誰可以存取「所有人」→「部署」。</p>
+                            <p class="text-xs text-amber-800 bg-amber-50 rounded-lg p-2 mt-1.5">授權時若出現「Google 尚未驗證這個應用程式」，因為是你自己的程式，按「進階」→「前往…（不安全）」→「允許」即可。</p>
+                        </div>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="w-6 h-6 rounded-full bg-accent text-white text-xs font-bold grid place-items-center shrink-0">4</span>
+                        <div class="min-w-0 flex-1">
+                            <p class="font-bold text-primary">貼上網址並測試</p>
+                            <p class="text-gray-500 mt-0.5">複製「網頁應用程式」網址（結尾是 /exec），貼在下面。</p>
+                            <input type="url" id="stock-api-url" placeholder="https://script.google.com/macros/s/…/exec" class="field-sm mt-2" autocomplete="off" autocapitalize="off" spellcheck="false">
+                            <button type="button" id="stock-api-test-btn" onclick="testAndSaveStockApi()" class="btn-primary w-full !h-11 mt-2"><i class="fas fa-plug-circle-check"></i>測試並儲存</button>
+                            <div id="stock-api-test-result" class="hidden mt-2 rounded-xl p-3 text-sm"></div>
+                        </div>
+                    </li>
+                </ol>
+                <button type="button" id="stock-api-disable-btn" onclick="disableStockApi()" class="hidden w-full h-10 rounded-xl text-sm text-gray-500 hover:text-red-600 hover:bg-red-50">停用自動更新股價</button>
+            </div>
+        </div>
+    </div>
+    <script type="text/plain" id="gas-source">/**
+ * Winds 資產分配計畫 — 股價查詢小程式（Google Apps Script）
+ *
+ * 用途：記帳工具把持有的股票代號傳過來，這支程式查好股價後回傳。
+ *       只會收到「股票代號」，不會收到你的持股數量或金額。
+ *
+ * 安裝方式（只需做一次）：
+ *   1. 開一個新的 Google 試算表（網址列輸入 sheets.new）
+ *   2. 上方選單「擴充功能」→「Apps Script」
+ *   3. 刪掉編輯器裡原本的內容，貼上這整份程式碼，按儲存（磁碟片圖示）
+ *   4. 右上角「部署」→「新增部署作業」→ 齒輪選「網頁應用程式」
+ *      執行身分：我　／　誰可以存取：所有人 → 按「部署」
+ *   5. 依畫面授權（出現「Google 尚未驗證這個應用程式」時，按「進階」→「前往…（不安全）」→「允許」）
+ *   6. 複製「網頁應用程式」網址（結尾是 /exec），貼到記帳工具的股價設定裡
+ *
+ * 呼叫方式：
+ *   .../exec?codes=TW:2330,TW:00878,US:QQQ
+ *   TW = 台股（先查上市 TPE，查不到再查上櫃 TPEX）；US = 美股
+ */
+
+var SHEET_NAME = '_winds_prices';   // 程式自動建立的工作表，用來放 GOOGLEFINANCE 公式
+var MAX_CODES = 60;
+var WAIT_ROUNDS = 8;                 // GOOGLEFINANCE 計算需要一點時間，最多等 8 輪
+var WAIT_MS = 1200;
+
+function doGet(e) {
+  var started = Date.now();
+  try {
+    var items = parseCodes_((e && e.parameter && e.parameter.codes) || '');
+    if (items.length === 0) {
+      return json_({ ok: true, prices: {}, missing: [], time: Date.now(), version: 1 });
+    }
+
+    var prices = {};
+    var lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      prices = fetchFromGoogleFinance_(items);
+    } finally {
+      lock.releaseLock();
+    }
+
+    // 台股查不到時，改用證交所 / 櫃買中心的每日收盤價備援
+    var twMissing = items.filter(function (it) { return it.market === 'TW' && !(it.key in prices); });
+    if (twMissing.length) {
+      var closes = fetchTwOfficialCloses_();
+      twMissing.forEach(function (it) {
+        if (closes[it.code] > 0) prices[it.key] = { price: closes[it.code], source: 'official-close' };
+      });
+    }
+
+    var missing = items.filter(function (it) { return !(it.key in prices); }).map(function (it) { return it.key; });
+    return json_({ ok: true, prices: prices, missing: missing, time: Date.now(), ms: Date.now() - started, version: 1 });
+  } catch (err) {
+    return json_({ ok: false, error: String(err && err.message || err), time: Date.now(), version: 1 });
+  }
+}
+
+/** 解析並嚴格檢查代號（只允許英數、點、橫線），避免被塞入公式 */
+function parseCodes_(raw) {
+  var seen = {};
+  return String(raw).split(',').map(function (s) { return s.trim().toUpperCase(); })
+    .filter(function (s) { return s; })
+    .map(function (s) {
+      var m = s.match(/^(TW|US):([A-Z0-9][A-Z0-9.\-]{0,11})$/);
+      return m ? { market: m[1], code: m[2], key: m[1] + ':' + m[2] } : null;
+    })
+    .filter(function (it) {
+      if (!it || seen[it.key]) return false;
+      seen[it.key] = true;
+      return true;
+    })
+    .slice(0, MAX_CODES);
+}
+
+function fetchFromGoogleFinance_(items) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
+  sheet.clearContents();
+
+  // 每列：A=代號鍵　B=主要公式　C=備用公式（台股上櫃）
+  var rows = items.map(function (it) {
+    if (it.market === 'TW') {
+      return [it.key, '=GOOGLEFINANCE("TPE:' + it.code + '","price")', '=GOOGLEFINANCE("TPEX:' + it.code + '","price")'];
+    }
+    return [it.key, '=GOOGLEFINANCE("' + it.code + '","price")', ''];
+  });
+  sheet.getRange(1, 1, rows.length, 3).setValues(rows.map(function (r) { return [r[0], '', '']; }));
+  sheet.getRange(1, 2, rows.length, 2).setFormulas(rows.map(function (r) { return [r[1], r[2]]; }));
+
+  var prices = {};
+  for (var round = 0; round < WAIT_ROUNDS; round++) {
+    SpreadsheetApp.flush();
+    var values = sheet.getRange(1, 1, rows.length, 3).getValues();
+    var pending = 0;
+    values.forEach(function (v) {
+      var key = v[0];
+      if (prices[key]) return;
+      var p = firstPositiveNumber_(v[1], v[2]);
+      if (p) prices[key] = { price: p, source: 'googlefinance' };
+      else pending++;
+    });
+    if (pending === 0) break;
+    Utilities.sleep(WAIT_MS);
+  }
+  return prices;
+}
+
+function firstPositiveNumber_(a, b) {
+  if (typeof a === 'number' && a > 0) return a;
+  if (typeof b === 'number' && b > 0) return b;
+  return 0;
+}
+
+/** 證交所（上市）＋櫃買中心（上櫃）每日收盤價，結果快取 30 分鐘 */
+function fetchTwOfficialCloses_() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get('tw_closes');
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) {}
+  }
+  var closes = {};
+  var sources = [
+    { url: 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL', code: ['Code'], price: ['ClosingPrice'] },
+    { url: 'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes', code: ['SecuritiesCompanyCode', 'Code'], price: ['Close', 'ClosingPrice'] }
+  ];
+  sources.forEach(function (src) {
+    try {
+      var res = UrlFetchApp.fetch(src.url, { muteHttpExceptions: true, headers: { Accept: 'application/json' } });
+      if (res.getResponseCode() !== 200) return;
+      var list = JSON.parse(res.getContentText());
+      if (!Array.isArray(list)) return;
+      list.forEach(function (row) {
+        var code = pick_(row, src.code);
+        var price = parseFloat(String(pick_(row, src.price) || '').replace(/,/g, ''));
+        if (code && price > 0 && !(code in closes)) closes[String(code).trim().toUpperCase()] = price;
+      });
+    } catch (e) { /* 單一來源失敗就略過 */ }
+  });
+  try {
+    var text = JSON.stringify(closes);
+    if (text.length < 90000) cache.put('tw_closes', text, 1800);
+  } catch (e) {}
+  return closes;
+}
+
+function pick_(row, keys) {
+  for (var i = 0; i < keys.length; i++) {
+    if (row[keys[i]] !== undefined && row[keys[i]] !== '') return row[keys[i]];
+  }
+  return '';
+}
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** 在編輯器裡按「執行」這個函式，可以先測試是否能抓到股價 */
+function testRun() {
+  var out = doGet({ parameter: { codes: 'TW:2330,TW:00878,US:QQQ' } });
+  Logger.log(out.getContent());
+}
+</script>
+
     <!-- 調整餘額 Modal -->
     <div id="adjust-balance-modal" class="modal fixed inset-0 z-[60] flex items-end sm:items-center justify-center hidden">
         <div class="modal-backdrop absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeAdjustBalanceModal()"></div>
@@ -886,6 +1103,7 @@
 
             <div class="px-5 pb-6 pb-safe">
                 <div id="stock-update-tab" class="stock-tab-content space-y-3">
+                    <div id="stock-auto-box"></div>
                     <p class="text-sm text-gray-500">修正目前的收盤價（計算市值）與平均成本（計算損益）。</p>
                     <div id="stock-price-list" class="space-y-3"></div>
                     <button onclick="saveStockPrices()" class="btn-accent w-full mt-2"><i class="fas fa-floppy-disk"></i>儲存更新</button>
@@ -1294,17 +1512,18 @@
                 let status = '';
                 if (rateStatus.state === 'loading') status = '<i class="fas fa-rotate fa-spin mr-1"></i>更新中…';
                 else if (rateStatus.state === 'error') status = `<i class="fas fa-triangle-exclamation mr-1 text-amber-300"></i>${rateStatus.message}`;
-                else status = appData.ratesManual ? `手動設定 · ${formatRateTime(appData.ratesUpdatedAt)}` : `更新於 ${formatRateTime(appData.ratesUpdatedAt)}`;
+                else status = appData.ratesManual ? `匯率手動設定 · ${formatRateTime(appData.ratesUpdatedAt)}` : `匯率更新於 ${formatRateTime(appData.ratesUpdatedAt)}`;
                 el.innerHTML = `
                     <span class="flex items-center justify-between gap-2">
                         <span class="min-w-0">
                             <span class="tabular-nums">USD ${r.USD} · CNY ${r.CNY}</span>
                             <span class="block text-[10px] opacity-80">${status}</span>
                         </span>
-                        <button onclick="fetchExchangeRates(true)" class="shrink-0 h-8 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-medium" ${rateFetching ? 'disabled' : ''}>
-                            <i class="fas fa-rotate mr-1 ${rateFetching ? 'fa-spin' : ''}"></i>更新匯率
+                        <button onclick="refreshMarketData()" class="shrink-0 h-8 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-medium" ${(rateFetching || stockFetching) ? 'disabled' : ''}>
+                            <i class="fas fa-rotate mr-1 ${(rateFetching || stockFetching) ? 'fa-spin' : ''}"></i>${appData.stockApiUrl ? '更新匯率與股價' : '更新匯率'}
                         </button>
-                    </span>`;
+                    </span>
+                    ${appData.stockApiUrl ? `<span class="block text-[10px] opacity-80 mt-1">${stockStatusText()}</span>` : ''}`;
             }
             const usdIn = document.getElementById('setting-rate-usd');
             const cnyIn = document.getElementById('setting-rate-cny');
@@ -1334,6 +1553,14 @@
         }
 
         // 手機分頁常常一直開著：回到畫面時若匯率超過 6 小時沒更新就自動更新
+        function autoRefreshStocksIfStale() {
+            if (!appData.stockApiUrl) return;
+            if (!appData.stockPricesUpdatedAt || Date.now() - appData.stockPricesUpdatedAt > STOCK_STALE_MS) fetchStockPrices();
+        }
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') autoRefreshStocksIfStale();
+        });
+
         function autoRefreshRatesIfStale() {
             if (appData.ratesManual) return;
             if (!appData.ratesUpdatedAt || Date.now() - appData.ratesUpdatedAt > RATE_STALE_MS) fetchExchangeRates();
@@ -1414,6 +1641,9 @@
             appData.ratesUpdatedAt = p.ratesUpdatedAt || null;
             appData.ratesSource = p.ratesSource || '';
             appData.ratesManual = !!p.ratesManual;
+            appData.stockApiUrl = typeof p.stockApiUrl === 'string' ? p.stockApiUrl : '';
+            appData.stockPricesUpdatedAt = p.stockPricesUpdatedAt || null;
+            appData.stockPricesMissing = Array.isArray(p.stockPricesMissing) ? p.stockPricesMissing : [];
             if (!appData.exchangeRates || typeof appData.exchangeRates !== 'object') appData.exchangeRates = { TWD: 1, USD: 32.0, CNY: 4.4 };
             appData.exchangeRates.TWD = 1;
             // 讓既有程式碼直接使用同一份資料
@@ -1503,7 +1733,10 @@
                     statsStartDay: appData.statsStartDay,
                     ratesUpdatedAt: appData.ratesUpdatedAt || null,
                     ratesSource: appData.ratesSource || '',
-                    ratesManual: !!appData.ratesManual
+                    ratesManual: !!appData.ratesManual,
+                    stockApiUrl: appData.stockApiUrl || '',
+                    stockPricesUpdatedAt: appData.stockPricesUpdatedAt || null,
+                    stockPricesMissing: appData.stockPricesMissing || []
                 };
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
             } catch (e) {
@@ -1978,6 +2211,7 @@
         // --- 股票管理 Modal ---
         function openStockModal() {
             document.getElementById('stock-modal').classList.remove('hidden');
+            renderStockAutoBox();
             renderStockUpdateList();
             renderTradeStockOptions();
             const stockAccSelect = document.getElementById('new-stock-account');
@@ -2075,6 +2309,209 @@
             appData.stocks[index].cost = parseFloat(cost);
         }
 
+        // ===================== 自動更新股價（透過使用者自己的 Apps Script） =====================
+        const STOCK_TIMEOUT_MS = 45000;
+        const STOCK_STALE_MS = 15 * 60 * 1000;
+        let stockFetching = false;
+        let stockStatus = { state: 'idle', message: '' };
+
+        function stockKey(s) {
+            const code = String(s.code || '').trim().toUpperCase();
+            return `${s.currency === 'TWD' ? 'TW' : 'US'}:${code}`;
+        }
+        function isValidStockApiUrl(u) {
+            return /^https:\/\/script\.google(usercontent)?\.com\/.+/.test(u || '');
+        }
+
+        async function callStockApi(url, keys) {
+            const full = url + (url.includes('?') ? '&' : '?') + 'codes=' + encodeURIComponent(keys.join(','));
+            const data = await fetchJsonWithTimeout(full, STOCK_TIMEOUT_MS);
+            if (!data || data.ok !== true || typeof data.prices !== 'object') {
+                throw new Error((data && data.error) || '回傳格式不正確');
+            }
+            return data;
+        }
+
+        function stockStatusText() {
+            if (stockStatus.state === 'loading') return '<i class="fas fa-rotate fa-spin mr-1"></i>股價更新中…';
+            if (stockStatus.state === 'error') return `<i class="fas fa-triangle-exclamation mr-1 text-amber-300"></i>股價${stockStatus.message}`;
+            const miss = (appData.stockPricesMissing || []).length;
+            return `股價更新於 ${formatRateTime(appData.stockPricesUpdatedAt)}${miss ? `（${miss} 檔查不到）` : ''}`;
+        }
+
+        async function fetchStockPrices(manual = false) {
+            if (!appData.stockApiUrl || stockFetching) return;
+            const held = appData.stocks.filter(s => s.code && s.shares > 0);
+            if (!held.length) return;
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                stockStatus = { state: 'error', message: '：目前沒有網路' };
+                renderStockStatusAll();
+                if (manual) showAlert('warning', '目前沒有網路連線，無法更新股價');
+                return;
+            }
+            stockFetching = true;
+            stockStatus = { state: 'loading', message: '' };
+            renderStockStatusAll();
+            try {
+                const keys = [...new Set(held.map(stockKey))];
+                const data = await callStockApi(appData.stockApiUrl, keys);
+                let updated = 0;
+                const missing = [];
+                appData.stocks.forEach(s => {
+                    const hit = data.prices[stockKey(s)];
+                    const price = hit && parseFloat(hit.price);
+                    if (price > 0) {
+                        s.currentPrice = parseFloat(price.toFixed(4));
+                        s.priceUpdatedAt = Date.now();
+                        updated++;
+                    } else if (s.shares > 0) {
+                        missing.push(`${s.name}(${s.code})`);
+                    }
+                });
+                appData.stockPricesUpdatedAt = Date.now();
+                appData.stockPricesMissing = missing;
+                stockStatus = { state: 'ok', message: '' };
+                applyTransactionsToAssets();
+                saveData();
+                refreshAllViews();
+                if (manual) {
+                    showAlert(missing.length ? 'warning' : 'success',
+                        missing.length ? `已更新 ${updated} 檔，查不到：${missing.join('、')}` : `已更新 ${updated} 檔股價`);
+                }
+            } catch (err) {
+                console.error('股價更新失敗', err);
+                const reason = err && err.name === 'AbortError' ? '連線逾時' : '連線失敗';
+                stockStatus = { state: 'error', message: `更新失敗（${reason}），顯示上次價格` };
+                if (manual) showAlert('danger', `股價更新失敗（${reason}），請稍後再試或檢查設定`);
+            } finally {
+                stockFetching = false;
+                renderStockStatusAll();
+            }
+        }
+
+        function refreshMarketData() {
+            fetchExchangeRates(true);
+            if (appData.stockApiUrl) fetchStockPrices(true);
+        }
+
+        function renderStockStatusAll() {
+            renderRateStatus();
+            renderStockAutoBox();
+            const modalOpen = !document.getElementById('stock-modal').classList.contains('hidden');
+            const updateTabVisible = !document.getElementById('stock-update-tab').classList.contains('hidden');
+            if (modalOpen && updateTabVisible && !stockFetching && document.activeElement && !document.activeElement.closest('#stock-price-list')) {
+                renderStockUpdateList();
+            }
+        }
+
+        function renderStockAutoBox() {
+            const box = document.getElementById('stock-auto-box');
+            if (!box) return;
+            if (!appData.stockApiUrl) {
+                box.innerHTML = `
+                    <div class="rounded-xl border border-dashed border-accent/50 bg-accent/5 p-3 flex items-center gap-3">
+                        <span class="w-9 h-9 rounded-full bg-accent/15 text-accent grid place-items-center shrink-0"><i class="fas fa-wand-magic-sparkles"></i></span>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-bold text-primary">想讓股價自動更新？</p>
+                            <p class="text-xs text-gray-500">設定一次，之後就像匯率一樣自動更新</p>
+                        </div>
+                        <button onclick="openStockAutoModal()" class="h-9 px-3 rounded-lg bg-accent text-white text-xs font-bold shrink-0">設定</button>
+                    </div>`;
+                return;
+            }
+            const miss = appData.stockPricesMissing || [];
+            box.innerHTML = `
+                <div class="rounded-xl border border-line bg-secondary/50 p-3">
+                    <div class="flex items-center gap-3">
+                        <span class="w-9 h-9 rounded-full bg-green-50 text-green-700 grid place-items-center shrink-0"><i class="fas fa-bolt"></i></span>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-bold text-primary">自動更新已開啟</p>
+                            <p class="text-xs text-gray-500">${stockStatusText().replace('text-amber-300', 'text-amber-500')}</p>
+                        </div>
+                        <button onclick="fetchStockPrices(true)" class="h-9 px-3 rounded-lg bg-white border border-line text-xs font-bold text-primary shrink-0" ${stockFetching ? 'disabled' : ''}>
+                            <i class="fas fa-rotate mr-1 ${stockFetching ? 'fa-spin' : ''}"></i>立即更新
+                        </button>
+                    </div>
+                    ${miss.length ? `<p class="text-[11px] text-amber-700 mt-2">查不到：${escapeHtml(miss.join('、'))}（請確認代號與幣別，查不到的維持手動）</p>` : ''}
+                    <button onclick="openStockAutoModal()" class="text-[11px] text-gray-400 hover:text-accent mt-1.5">變更設定</button>
+                </div>`;
+        }
+
+        function openStockAutoModal() {
+            document.getElementById('stock-api-url').value = appData.stockApiUrl || '';
+            document.getElementById('gas-code-view').value = document.getElementById('gas-source').textContent.trim();
+            document.getElementById('stock-api-test-result').classList.add('hidden');
+            document.getElementById('stock-api-disable-btn').classList.toggle('hidden', !appData.stockApiUrl);
+            document.getElementById('stock-auto-modal').classList.remove('hidden');
+        }
+        function closeStockAutoModal() {
+            document.getElementById('stock-auto-modal').classList.add('hidden');
+        }
+
+        async function copyGasCode() {
+            const text = document.getElementById('gas-source').textContent.trim();
+            let ok = false;
+            try {
+                if (navigator.clipboard && window.isSecureContext !== false) {
+                    await navigator.clipboard.writeText(text);
+                    ok = true;
+                }
+            } catch (e) {}
+            if (!ok) {
+                const ta = document.getElementById('gas-code-view');
+                ta.value = text;
+                ta.classList.remove('hidden');
+                ta.focus();
+                ta.select();
+                try { ok = document.execCommand('copy'); } catch (e) {}
+            }
+            showAlert(ok ? 'success' : 'info', ok ? '已複製程式碼' : '請長按下方文字框，全選後複製');
+        }
+
+        async function testAndSaveStockApi() {
+            const url = document.getElementById('stock-api-url').value.trim();
+            const out = document.getElementById('stock-api-test-result');
+            const btn = document.getElementById('stock-api-test-btn');
+            const show = (cls, html) => { out.className = `mt-2 rounded-xl p-3 text-sm ${cls}`; out.innerHTML = html; };
+            if (!isValidStockApiUrl(url)) {
+                show('bg-red-50 text-red-700', '網址格式不對：應該是 https://script.google.com/macros/s/…/exec 開頭的網址');
+                return;
+            }
+            const held = appData.stocks.filter(s => s.code && s.shares > 0);
+            const keys = held.length ? [...new Set(held.map(stockKey))] : ['TW:2330'];
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-rotate fa-spin"></i>測試中…第一次可能需要 10～20 秒';
+            show('bg-secondary text-gray-600', `正在查詢 ${keys.length} 檔股價…`);
+            try {
+                const data = await callStockApi(url, keys);
+                const found = keys.filter(k => data.prices[k]);
+                const miss = keys.filter(k => !data.prices[k]);
+                appData.stockApiUrl = url;
+                saveData();
+                show('bg-green-50 text-green-800', `<i class="fas fa-circle-check mr-1"></i>連線成功！查到 ${found.length} 檔${miss.length ? `，查不到：${escapeHtml(miss.join('、'))}` : ''}。已儲存設定。`);
+                document.getElementById('stock-api-disable-btn').classList.remove('hidden');
+                await fetchStockPrices(false);
+            } catch (err) {
+                const reason = err && err.name === 'AbortError' ? '連線逾時' : (err && err.message) || '連線失敗';
+                show('bg-red-50 text-red-700', `連線失敗（${escapeHtml(reason)}）。請確認：部署時「誰可以存取」選了「所有人」、網址結尾是 /exec，且已完成授權。`);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-plug-circle-check"></i>測試並儲存';
+            }
+        }
+
+        async function disableStockApi() {
+            const ok = await showConfirm({ title: '停用自動更新股價？', message: '之後改回手動輸入股價。Google 那邊的小程式不會被刪除。', confirmText: '停用', danger: true });
+            if (!ok) return;
+            appData.stockApiUrl = '';
+            appData.stockPricesMissing = [];
+            stockStatus = { state: 'idle', message: '' };
+            saveData();
+            closeStockAutoModal();
+            renderStockStatusAll();
+            showAlert('info', '已停用自動更新股價');
+        }
+
         function saveStockPrices() {
             applyTransactionsToAssets();
             saveData();
@@ -2121,6 +2558,7 @@
             closeStockModal();
             showAlert('success', `已新增股票：${name}`);
             e.target.reset();
+            if (appData.stockApiUrl) fetchStockPrices();
         });
 
         document.getElementById('stock-trade-form').addEventListener('submit', function(e) {
@@ -4340,6 +4778,7 @@
             if (e.key !== 'Escape') return;
             const order = [
                 ['confirm-modal', () => closeConfirm(false)],
+                ['stock-auto-modal', closeStockAutoModal],
                 ['delete-stock-modal', closeDeleteStockModal],
                 ['delete-modal', closeDeleteModal],
                 ['adjust-balance-modal', closeAdjustBalanceModal],
@@ -4372,6 +4811,7 @@
             checkUrlAndQuickAdd();
             renderRateStatus();
             if (!appData.ratesManual) fetchExchangeRates();
+            autoRefreshStocksIfStale();
 
             initKeepEntryPref();
             initBatch();
