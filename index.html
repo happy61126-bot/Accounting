@@ -1203,12 +1203,78 @@ function testRun() {
 
         const CREDIT_CARDS_INITIAL = [
             { id: 'c1', name: "台新richart卡(玫瑰卡&gogo卡)", currency: "TWD", linkedAccount: "台新RICHART帳戶", billingDay: 7, paymentDay: 21 },
-            { id: 'c2', name: "玉山ubear卡", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5, paymentDay: 20 },
-            { id: 'c3', name: "玉山unicard卡", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5, paymentDay: 20 },
+            { id: 'c2', name: "玉山卡(ubear&unicard)", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5, paymentDay: 20 },
             { id: 'c4', name: "國泰cube卡", currency: "TWD", linkedAccount: "國泰cube帳戶", billingDay: 5, paymentDay: 20 },
             { id: 'c5', name: "星展現金回饋卡", currency: "TWD", linkedAccount: "台新薪轉帳戶", billingDay: 7, paymentDay: 25 },
             { id: 'c6', name: "聯邦吉鶴卡", currency: "TWD", linkedAccount: "聯邦newnewbank帳戶", billingDay: 3, paymentDay: 18 }
         ];
+
+        // 信用卡合併規則：讀取資料（含匯入舊備份）時，自動把 from 裡的卡片合併成 to
+        const CARD_MERGE_RULES = [
+            { from: ["玉山ubear卡", "玉山unicard卡"], to: "玉山卡(ubear&unicard)" }
+        ];
+
+        // 回傳是否有變更
+        function applyCardMerges() {
+            let changed = false;
+            CARD_MERGE_RULES.forEach(rule => {
+                const fromSet = new Set(rule.from);
+                const sources = appData.creditCards.filter(c => fromSet.has(c.name));
+                const hasRefs = appData.transactions.some(t => fromSet.has(t.account) || fromSet.has(t.toAccount))
+                    || (appData.paidBills || []).some(b => fromSet.has(b.cardName));
+                if (!sources.length && !hasRefs) return;
+                changed = true;
+
+                // 卡片：保留一張，沿用第一張舊卡的扣款帳戶與日期
+                if (!appData.creditCards.some(c => c.name === rule.to)) {
+                    const base = sources[0] || { currency: 'TWD', linkedAccount: '玉山數位帳戶', billingDay: 5, paymentDay: 20 };
+                    const idx = sources.length ? appData.creditCards.indexOf(sources[0]) : appData.creditCards.length;
+                    appData.creditCards.splice(idx, 0, { ...base, id: 'card-merged-' + rule.to, name: rule.to });
+                }
+                appData.creditCards = appData.creditCards.filter(c => !fromSet.has(c.name));
+
+                // 記帳紀錄
+                appData.transactions.forEach(t => {
+                    if (fromSet.has(t.account)) t.account = rule.to;
+                    if (fromSet.has(t.toAccount)) t.toAccount = rule.to;
+                    rule.from.forEach(f => {
+                        if (t.name === `繳信用卡費-${f}`) t.name = `繳信用卡費-${rule.to}`;
+                    });
+                });
+
+                // 已繳帳單：改成新卡的帳單編號，同一期兩張舊卡的繳款金額會加總
+                (appData.paidBills || []).forEach(b => {
+                    rule.from.forEach(f => {
+                        if (b.cardName === f || (typeof b.id === 'string' && b.id.startsWith(`pb-${f}-`))) {
+                            b.id = b.id.replace(`pb-${f}-`, `pb-${rule.to}-`);
+                            b.cardName = rule.to;
+                        }
+                    });
+                });
+            });
+
+            // 批次補帳草稿（只存在這個瀏覽器）
+            try {
+                const d = JSON.parse(localStorage.getItem('winds_batch_draft') || 'null');
+                if (d) {
+                    let dChanged = false;
+                    CARD_MERGE_RULES.forEach(rule => {
+                        if (rule.from.includes(d.account)) { d.account = rule.to; dChanged = true; }
+                        Object.keys(d.billAmounts || {}).forEach(k => {
+                            const [name, month] = k.split('|');
+                            if (rule.from.includes(name)) {
+                                const nk = `${rule.to}|${month}`;
+                                if (!(nk in d.billAmounts)) d.billAmounts[nk] = d.billAmounts[k];
+                                delete d.billAmounts[k];
+                                dChanged = true;
+                            }
+                        });
+                    });
+                    if (dChanged) localStorage.setItem('winds_batch_draft', JSON.stringify(d));
+                }
+            } catch (e) {}
+            return changed;
+        }
 
         const DEFAULT_EXPENSE_CATEGORIES = {
             "飲食": ["早餐", "午餐", "晚餐", "點心", "零食", "飲料", "其他"],
@@ -1610,7 +1676,12 @@ function testRun() {
                             c.linkedAccount = "台新薪轉帳戶";
                         }
                     });
+                    const merged = applyCardMerges();
                     applySettings(parsedData);
+                    if (merged) {
+                        applyTransactionsToAssets();
+                        saveData();
+                    }
                 } else {
                     appData.fixedExpenses = JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
                     appData.stocks = JSON.parse(JSON.stringify(INITIAL_STOCKS));
@@ -2978,7 +3049,8 @@ function testRun() {
                 let startDate = new Date(currentYear, currentMonth - 1, card.billingDay + 1, 0, 0, 0);
                 let payDate = new Date(currentYear, currentMonth, card.paymentDay);
                 const billId = `pb-${card.name}-${payDate.getTime()}`;
-                const isPaid = appData.paidBills && appData.paidBills.some(b => b.id === billId);
+                const paidSum = (appData.paidBills || []).filter(b => b.id === billId)
+                    .reduce((sum, b) => sum + (b.amount == null ? Infinity : (parseFloat(b.amount) || 0)), 0);
 
                 let cardTotal = 0;
                 appData.transactions.forEach(t => {
@@ -2994,15 +3066,18 @@ function testRun() {
                 });
 
                 if (cardTotal > 0) {
+                    const isPaid = paidSum > 0 && paidSum >= cardTotal - 0.5;
+                    const remaining = isPaid ? 0 : Math.max(0, Math.round((cardTotal - paidSum) * 100) / 100);
                     if (!accountGroups[card.linkedAccount]) {
                         accountGroups[card.linkedAccount] = { total: 0, cards: [], paymentDay: card.paymentDay, isFullyPaid: true };
                     }
                     if (!isPaid) {
-                        accountGroups[card.linkedAccount].total += cardTotal;
+                        accountGroups[card.linkedAccount].total += remaining;
                         accountGroups[card.linkedAccount].isFullyPaid = false;
                     }
                     accountGroups[card.linkedAccount].cards.push({
-                        name: card.name, amount: cardTotal, isPaid: isPaid, billId: billId, linkedAccount: card.linkedAccount
+                        name: card.name, amount: cardTotal, paid: isFinite(paidSum) ? paidSum : cardTotal, remaining,
+                        isPaid: isPaid, billId: billId, linkedAccount: card.linkedAccount
                     });
                 }
             });
@@ -3037,12 +3112,15 @@ function testRun() {
                     if (c.isPaid) {
                         actionHtml = '<span class="chip bg-green-50 text-green-700"><i class="fas fa-check"></i>已繳款</span>';
                     } else {
-                        actionHtml = `<button onclick="confirmPayBill('${c.billId}', '${c.name}', ${c.amount}, '${c.linkedAccount}')" class="h-7 px-3 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition">繳款</button>`;
+                        actionHtml = `<button onclick="confirmPayBill('${c.billId}', '${c.name}', ${c.remaining}, '${c.linkedAccount}')" class="h-7 px-3 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition">${c.paid > 0 ? '繳餘額' : '繳款'}</button>`;
                     }
+                    const partialHtml = (!c.isPaid && c.paid > 0)
+                        ? `<p class="text-[11px] text-amber-700">已繳 ${formatCurrency(c.paid, 'TWD')}，尚餘 <b>${formatCurrency(c.remaining, 'TWD')}</b></p>` : '';
                     return `<div class="flex justify-between items-center gap-2 py-2">
                         <div class="min-w-0">
                             <p class="text-sm text-gray-700 truncate">${c.name}</p>
                             <p class="text-sm tabular-nums ${c.isPaid ? 'line-through text-gray-400' : 'font-bold text-primary'}">$${formatCurrency(c.amount, 'TWD')}</p>
+                            ${partialHtml}
                         </div>
                         <div class="shrink-0">${actionHtml}</div>
                     </div>`;
