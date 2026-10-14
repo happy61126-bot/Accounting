@@ -147,6 +147,14 @@
 
             <!-- 1. 資產分配 -->
             <section id="assets-tab" class="tab-content hidden">
+                <div id="inbox-banner-assets" class="inbox-banner hidden mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-3 flex items-center gap-3">
+                    <span class="w-9 h-9 rounded-full bg-blue-100 text-blue-700 grid place-items-center shrink-0"><i class="fas fa-inbox"></i></span>
+                    <div class="min-w-0 flex-1">
+                        <p class="inbox-banner-text text-sm font-bold text-blue-900">有捷徑記帳待確認</p>
+                        <p class="text-xs text-blue-800/70">還缺分類或付款方式，補上就會入帳</p>
+                    </div>
+                    <button onclick="openInboxReview()" class="h-8 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold shrink-0">確認</button>
+                </div>
                 <div id="backup-banner" class="hidden mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 flex items-center gap-3">
                     <span class="w-9 h-9 rounded-full bg-amber-100 text-amber-700 grid place-items-center shrink-0"><i class="fas fa-cloud-arrow-down"></i></span>
                     <div class="min-w-0 flex-1">
@@ -300,6 +308,14 @@
 
                 <!-- 記帳與紀錄 -->
                 <div id="bk-sub-entry" class="space-y-5">
+                <div id="inbox-banner-entry" class="inbox-banner hidden mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-3 flex items-center gap-3">
+                    <span class="w-9 h-9 rounded-full bg-blue-100 text-blue-700 grid place-items-center shrink-0"><i class="fas fa-inbox"></i></span>
+                    <div class="min-w-0 flex-1">
+                        <p class="inbox-banner-text text-sm font-bold text-blue-900">有捷徑記帳待確認</p>
+                        <p class="text-xs text-blue-800/70">還缺分類或付款方式，補上就會入帳</p>
+                    </div>
+                    <button onclick="openInboxReview()" class="h-8 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold shrink-0">確認</button>
+                </div>
                     <div class="card p-4">
                         <form id="transaction-form" class="space-y-4">
                             <div class="flex items-center justify-between gap-3">
@@ -468,15 +484,16 @@
                         <p id="stats-date-range" class="text-xs text-gray-500 mb-3">統計區間: --/-- ~ --/--</p>
                         <div class="grid grid-cols-2 gap-3 mb-2">
                             <div class="p-3 bg-green-50 rounded-xl">
-                                <p class="text-xs text-gray-600">本月生活收入</p>
+                                <p class="text-xs text-gray-600">本月實際收入</p>
                                 <p id="stats-total-income" class="text-lg font-bold text-green-700 mt-1 tabular-nums">TWD 0</p>
                             </div>
                             <div class="p-3 bg-red-50 rounded-xl">
-                                <p class="text-xs text-gray-600">本月生活支出</p>
+                                <p class="text-xs text-gray-600">本月實際支出</p>
                                 <p id="stats-total-expense" class="text-lg font-bold text-red-700 mt-1 tabular-nums">TWD 0</p>
+                                <p id="stats-expense-breakdown" class="hidden text-[11px] text-gray-500 mt-0.5 tabular-nums"></p>
                             </div>
                         </div>
-                        <p class="text-[11px] text-gray-400 mb-4">* 投資買賣與轉帳不計入生活收支統計</p>
+                        <p class="text-[11px] text-gray-400 mb-4">* 還款、退款、退刷會從支出扣除，不算收入；股票交易、投資分類與轉帳不計入</p>
                         <p class="text-xs font-bold text-gray-500 mb-2">各帳戶支出占比</p>
                         <div id="monthly-stats-list" class="space-y-3"></div>
                     </div>
@@ -486,11 +503,13 @@
                             <h4 class="section-title">本月消費分析</h4>
                             <p class="text-xs text-gray-400 mb-2" data-stats-label="range">每月5號~下個月4號</p>
                             <div class="w-full relative" style="height: 280px;"><canvas id="monthly-pie-chart"></canvas></div>
+                            <p id="monthly-pie-note" class="hidden text-[11px] text-gray-400 mt-2 tabular-nums"></p>
                         </div>
                         <div class="card p-4">
                             <h4 class="section-title">本年度消費分析</h4>
                             <p class="text-xs text-gray-400 mb-2" data-stats-label="cycle">以每月5號結算週期計算</p>
                             <div class="w-full relative" style="height: 280px;"><canvas id="yearly-pie-chart"></canvas></div>
+                            <p id="yearly-pie-note" class="hidden text-[11px] text-gray-400 mt-2 tabular-nums"></p>
                         </div>
                     </div>
 
@@ -734,6 +753,7 @@
                     <button onclick="switchSettingsTab('cards')" class="seg-btn !px-1 settings-tab-btn" data-target="settings-cards-tab">信用卡</button>
                     <button onclick="switchSettingsTab('categories')" class="seg-btn !px-1 settings-tab-btn" data-target="settings-categories-tab">分類</button>
                     <button onclick="switchSettingsTab('general')" class="seg-btn !px-1 settings-tab-btn" data-target="settings-general-tab">一般</button>
+                    <button onclick="switchSettingsTab('shortcut')" class="seg-btn !px-1 settings-tab-btn" data-target="settings-shortcut-tab">捷徑</button>
                 </div>
             </div>
 
@@ -804,6 +824,11 @@
                         </div>
                         <div id="settings-income-categories" class="flex flex-wrap gap-1.5"></div>
                     </div>
+                </div>
+
+                <div id="settings-shortcut-tab" class="settings-tab-content hidden space-y-4">
+                    <p class="text-sm text-gray-500">讓 iPhone 捷徑（桌面快速記帳、Apple Pay 感應、刷卡簡訊）把記帳送進來。資料會先暫存在你自己的 Google 小程式，記帳工具打開時自動收進來。</p>
+                    <div id="shortcut-settings-body"></div>
                 </div>
 
                 <div id="settings-general-tab" class="settings-tab-content hidden space-y-4">
@@ -900,10 +925,16 @@
         </div>
     </div>
     <script type="text/plain" id="gas-source">/**
- * Winds 資產分配計畫 — 股價查詢小程式（Google Apps Script）
+ * Winds 資產分配計畫 — Google 小程式（Google Apps Script）　版本 3
  *
- * 用途：記帳工具把持有的股票代號傳過來，這支程式查好股價後回傳。
- *       只會收到「股票代號」，不會收到你的持股數量或金額。
+ * 用途：
+ *   1. 股價查詢：記帳工具把持有的股票代號傳過來，這支程式查好股價後回傳。
+ *      只會收到「股票代號」，不會收到你的持股數量或金額。
+ *   2. 捷徑記帳收件匣：iPhone 捷徑（桌面快速記帳、Apple Pay、簡訊）把記帳送到這裡暫存，
+ *      記帳工具打開時再收回去。需要密鑰才能存取，記帳工具會自動設定。
+ *
+ * 從版本 1 更新：貼上新程式碼並儲存 →「部署」→「管理部署作業」→ 鉛筆圖示 →
+ *   版本選「新版本」→「部署」。網址不會改變。
  *
  * 安裝方式（只需做一次）：
  *   1. 開一個新的 Google 試算表（網址列輸入 sheets.new）
@@ -924,12 +955,58 @@ var MAX_CODES = 60;
 var WAIT_ROUNDS = 8;                 // GOOGLEFINANCE 計算需要一點時間，最多等 8 輪
 var WAIT_MS = 1200;
 
+var INBOX_SHEET = '_inbox';          // 捷徑記帳暫存區
+var INBOX_COLS = ['id', 'createdAt', 'date', 'type', 'amount', 'currency', 'name', 'account', 'cardHint', 'merchant', 'note', 'source', 'status'];
+var VERSION = 3;
+
 function doGet(e) {
+  return route_(collectParams_(e));
+}
+
+/** iPhone 捷徑用 POST（JSON 本文）送記帳過來 */
+function doPost(e) {
+  return route_(collectParams_(e));
+}
+
+function collectParams_(e) {
+  var p = {};
+  var src = (e && e.parameter) || {};
+  Object.keys(src).forEach(function (k) { p[k] = src[k]; });
+  if (e && e.postData && e.postData.contents) {
+    try {
+      var body = JSON.parse(e.postData.contents);
+      if (body && typeof body === 'object') Object.keys(body).forEach(function (k) { p[k] = body[k]; });
+    } catch (err) { /* 不是 JSON 就略過 */ }
+  }
+  return p;
+}
+
+function route_(p) {
+  var action = String(p.action || '').toLowerCase();
+  try {
+    if (!action || action === 'prices') return handlePrices_(p);
+    if (action === 'ping') return json_({ ok: true, version: VERSION, inbox: true, hasKey: !!getKey_() });
+    if (action === 'setkey') return handleSetKey_(p);
+    if (!checkKey_(p.key)) return json_({ ok: false, error: '密鑰不正確', code: 'bad_key', version: VERSION });
+    if (action === 'add') return handleAdd_(p);
+    if (action === 'sms') return handleSms_(p);
+    if (action === 'setname') return handleSetName_(p);
+    if (action === 'inbox') return handleInbox_();
+    if (action === 'ack') return handleAck_(p);
+    return json_({ ok: false, error: '未知的動作：' + action, version: VERSION });
+  } catch (err) {
+    return json_({ ok: false, error: String(err && err.message || err), version: VERSION });
+  }
+}
+
+// ---------------- 股價 ----------------
+function handlePrices_(p) {
   var started = Date.now();
+  var e = { parameter: { codes: p.codes || '' } };
   try {
     var items = parseCodes_((e && e.parameter && e.parameter.codes) || '');
     if (items.length === 0) {
-      return json_({ ok: true, prices: {}, missing: [], time: Date.now(), version: 1 });
+      return json_({ ok: true, prices: {}, missing: [], time: Date.now(), version: VERSION });
     }
 
     var prices = {};
@@ -951,10 +1028,233 @@ function doGet(e) {
     }
 
     var missing = items.filter(function (it) { return !(it.key in prices); }).map(function (it) { return it.key; });
-    return json_({ ok: true, prices: prices, missing: missing, time: Date.now(), ms: Date.now() - started, version: 1 });
+    return json_({ ok: true, prices: prices, missing: missing, time: Date.now(), ms: Date.now() - started, version: VERSION });
   } catch (err) {
-    return json_({ ok: false, error: String(err && err.message || err), time: Date.now(), version: 1 });
+    return json_({ ok: false, error: String(err && err.message || err), time: Date.now(), version: VERSION });
   }
+}
+
+// ---------------- 捷徑記帳收件匣 ----------------
+function getKey_() {
+  return PropertiesService.getScriptProperties().getProperty('INBOX_KEY') || '';
+}
+
+function checkKey_(key) {
+  var stored = getKey_();
+  return !!stored && typeof key === 'string' && key === stored;
+}
+
+/** 第一次由記帳工具設定密鑰；之後只能用同一組（要重設請在編輯器執行 resetInboxKey） */
+function handleSetKey_(p) {
+  var key = String(p.key || '');
+  if (!/^[A-Za-z0-9]{16,64}$/.test(key)) return json_({ ok: false, error: '密鑰格式不正確', version: VERSION });
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var stored = getKey_();
+    if (!stored) {
+      PropertiesService.getScriptProperties().setProperty('INBOX_KEY', key);
+      return json_({ ok: true, created: true, version: VERSION });
+    }
+    if (stored === key) return json_({ ok: true, created: false, version: VERSION });
+    return json_({ ok: false, error: '這支小程式已經綁定其他密鑰', code: 'key_taken', version: VERSION });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function inboxSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(INBOX_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(INBOX_SHEET);
+    sh.getRange(1, 1, 1, INBOX_COLS.length).setValues([INBOX_COLS]);
+  }
+  return sh;
+}
+
+/** 文字欄位：限制長度，並避免以 = + - @ 開頭被試算表當成公式 */
+function cleanText_(v, max) {
+  var s = String(v == null ? '' : v).replace(/[\r\n\t]+/g, ' ').trim().slice(0, max || 120);
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  return s;
+}
+
+/** 「NT$1,234」「1234元」「$ 56.7」都轉成數字 */
+function parseAmount_(v) {
+  if (typeof v === 'number') return v;
+  var m = String(v == null ? '' : v).replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+  return m ? parseFloat(m[0]) : NaN;
+}
+
+function handleAdd_(p) {
+  var amount = parseAmount_(p.amount);
+  if (!(amount > 0) || amount > 100000000) return json_({ ok: false, error: '金額不正確', version: VERSION });
+  var type = String(p.type || 'expense').toLowerCase() === 'income' ? 'income' : 'expense';
+  var date = String(p.date || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) date = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
+  var currency = /^[A-Za-z]{3}$/.test(String(p.currency || '')) ? String(p.currency).toUpperCase() : 'TWD';
+  var id = Utilities.getUuid();
+  var row = [id, Date.now(), date, type, amount, currency,
+    cleanText_(p.name, 60), cleanText_(p.account, 60), cleanText_(p.cardHint, 60),
+    cleanText_(p.merchant, 80), cleanText_(p.note, 120), cleanText_(p.source || 'shortcut', 20), 'new'];
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    inboxSheet_().appendRow(row);
+  } finally {
+    lock.releaseLock();
+  }
+  return json_({ ok: true, id: id, amount: amount, version: VERSION });
+}
+
+function readInbox_() {
+  var sh = inboxSheet_();
+  var last = sh.getLastRow();
+  if (last < 2) return [];
+  var values = sh.getRange(2, 1, last - 1, INBOX_COLS.length).getValues();
+  return values.map(function (v, i) {
+    var o = { _row: i + 2 };
+    INBOX_COLS.forEach(function (c, j) { o[c] = v[j]; });
+    if (o.date instanceof Date) o.date = Utilities.formatDate(o.date, 'Asia/Taipei', 'yyyy-MM-dd');
+    return o;
+  });
+}
+
+// ---------------- 刷卡簡訊解析 ----------------
+// 每家銀行一條規則；解析不到就回傳 null（捷徑會安靜結束，不跳任何東西）
+var SMS_RULES = [
+  { // 小心詐騙！星展卡末碼 4036 網路交易於 VIESHOW CINEMA  新臺幣 TWD 596.00，驗證碼 234514
+    bank: '星展', re: /星展卡末碼\s*(\d{4})[\s\S]*?交易於\s*([\s\S]*?)\s*新[臺台]幣\s*(?:TWD)?\s*\$?\s*([\d,]+(?:\.\d+)?)/,
+    pick: function (m) { return { last4: m[1], merchant: m[2], amount: m[3] }; } },
+  { // 防詐騙!台新卡末碼4209點選網頁識別碼HWTZ，交易金額【新臺幣2342.00元】，驗證碼[967976]
+    bank: '台新', re: /台新卡末碼\s*(\d{4})[\s\S]*?新[臺台]幣\s*([\d,]+(?:\.\d+)?)\s*元/,
+    pick: function (m) { return { last4: m[1], amount: m[2] }; } },
+  { // 國泰世華卡號後四碼8514於2026/09/2904:25MICROSOFT#G187270150NT$964元。因疑有異常消費…
+    bank: '國泰', re: /國泰世華卡號後四碼\s*(\d{4})\s*於\s*(\d{4})\/(\d{2})\/(\d{2})\s*\d{2}:\d{2}\s*([\s\S]*?)\s*NT\$\s*([\d,]+(?:\.\d+)?)\s*元/,
+    pick: function (m) { return { last4: m[1], date: m[2] + '-' + m[3] + '-' + m[4], merchant: m[5], amount: m[6] }; } },
+  { // 國泰世華卡末碼8514網路交易新臺幣TWD$1,509元，點選核對網頁識別碼…
+    bank: '國泰', re: /國泰世華卡末碼\s*(\d{4})[\s\S]*?(?:新[臺台]幣)?\s*TWD\s*\$?\s*([\d,]+(?:\.\d+)?)\s*元/,
+    pick: function (m) { return { last4: m[1], amount: m[2] }; } },
+  { // 提防詐騙！勿輕易提供密碼，您玉山卡網路消費 新台幣 TWD 1120 元，網頁識別碼…
+    bank: '玉山', re: /玉山卡(?:末[四]?碼\s*(\d{4}))?[\s\S]*?(?:消費|交易)\s*新[臺台]幣\s*(?:TWD)?\s*\$?\s*([\d,]+(?:\.\d+)?)\s*元/,
+    pick: function (m) { return { last4: m[1] || '', amount: m[2] }; } },
+  { // 【富邦华一银行】您尾号8983的卡片于2026-08-10 09:32，通过抖音支付-某某店快捷支付支付转账263.00元
+    bank: '富邦華一', currency: 'CNY',
+    re: /富邦华一银行[\s\S]*?尾号\s*(\d{4})[\s\S]*?于\s*(\d{4})-(\d{2})-(\d{2})\s*\d{2}:\d{2}[，,]\s*通过([\s\S]*?)(退款|支付转账|转账|消费|支付)\s*([\d,]+(?:\.\d+)?)\s*元/,
+    pick: function (m) {
+      var merchant = m[5].replace(/快捷支付$/, '').replace(/^.*?支付-/, '').replace(/快捷支付/g, '');
+      return { last4: m[1], date: m[2] + '-' + m[3] + '-' + m[4], merchant: merchant, amount: m[7], type: m[6] === '退款' ? 'income' : 'expense' };
+    } }
+];
+
+function parseSms_(text) {
+  var t = String(text || '').replace(/　/g, ' ').replace(/[\r\n]+/g, '');
+  for (var i = 0; i < SMS_RULES.length; i++) {
+    var rule = SMS_RULES[i];
+    var m = t.match(rule.re);
+    if (!m) continue;
+    var r = rule.pick(m);
+    var amount = parseAmount_(r.amount);
+    if (!(amount > 1)) return null;            // 綁卡驗證的 1 元等小額不算
+    return {
+      bank: rule.bank,
+      cardHint: rule.bank + (r.last4 ? ' ' + r.last4 : ''),
+      amount: amount,
+      currency: rule.currency || 'TWD',
+      merchant: String(r.merchant || '').replace(/\s+/g, ' ').trim(),
+      date: r.date || '',
+      type: r.type || 'expense'
+    };
+  }
+  return null;
+}
+
+/** 捷徑把整則簡訊送來；是刷卡就先存進收件匣（還沒分類），回傳摘要給捷徑顯示 */
+function handleSms_(p) {
+  var info = parseSms_(p.text);
+  if (!info) return json_({ ok: true, txn: false, go: 'no', version: VERSION });
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    // 同一張卡、同金額，20 分鐘內重複的驗證碼簡訊只算一次
+    var cutoff = Date.now() - 20 * 60000;
+    var dup = readInbox_().some(function (o) {
+      return o.source === 'sms' && o.cardHint === info.cardHint && Number(o.amount) === info.amount && Number(o.createdAt) > cutoff;
+    });
+    if (dup) return json_({ ok: true, txn: false, go: 'no', duplicate: true, version: VERSION });
+    var id = Utilities.getUuid();
+    var date = /^\d{4}-\d{2}-\d{2}$/.test(info.date) ? info.date : Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
+    inboxSheet_().appendRow([id, Date.now(), date, info.type, info.amount, info.currency, '', '',
+      cleanText_(info.cardHint, 60), cleanText_(info.merchant, 80), '', 'sms', 'new']);
+    var money = (info.currency === 'TWD' ? 'NT$' : info.currency + ' ') + info.amount;
+    var summary = [info.cardHint, info.merchant, money].filter(function (x) { return x; }).join('・');
+    return json_({ ok: true, txn: true, go: 'yes', id: id, amount: info.amount, summary: summary, version: VERSION });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 捷徑選好分類後補上 */
+function handleSetName_(p) {
+  var id = String(p.id || ''), name = cleanText_(p.name, 60);
+  if (!id || !name) return json_({ ok: false, error: '缺少 id 或分類', version: VERSION });
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var sh = inboxSheet_();
+    var col = INBOX_COLS.indexOf('name') + 1;
+    var row = readInbox_().filter(function (o) { return o.id === id && o.status === 'new'; })[0];
+    if (!row) return json_({ ok: false, error: '找不到這筆或已被收走', version: VERSION });
+    sh.getRange(row._row, col).setValue(name);
+    if (p.account) sh.getRange(row._row, INBOX_COLS.indexOf('account') + 1).setValue(cleanText_(p.account, 60));
+    return json_({ ok: true, version: VERSION });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleInbox_() {
+  // 簡訊記帳在還沒選分類前先保留 10 分鐘，避免記帳工具剛好在選分類時把它收走
+  var hold = Date.now() - 10 * 60000;
+  var items = readInbox_().filter(function (o) {
+    return o.status === 'new' && !(o.source === 'sms' && !o.name && Number(o.createdAt) > hold);
+  }).slice(0, 300)
+    .map(function (o) { delete o._row; delete o.status; return o; });
+  return json_({ ok: true, items: items, version: VERSION });
+}
+
+/** 記帳工具收下後回報，標記為已收，並清掉 30 天前已收的資料 */
+function handleAck_(p) {
+  var ids = String(p.ids || '').split(',').filter(function (s) { return s; });
+  var want = {};
+  ids.forEach(function (id) { want[id] = true; });
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  var done = 0;
+  try {
+    var sh = inboxSheet_();
+    var rows = readInbox_();
+    var statusCol = INBOX_COLS.indexOf('status') + 1;
+    rows.forEach(function (o) {
+      if (want[o.id] && o.status === 'new') { sh.getRange(o._row, statusCol).setValue('done'); done++; }
+    });
+    var cutoff = Date.now() - 30 * 86400000;
+    for (var i = rows.length - 1; i >= 0; i--) {
+      var o = rows[i];
+      var isDone = o.status === 'done' || want[o.id];
+      if (isDone && Number(o.createdAt) < cutoff) sh.deleteRow(o._row);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  return json_({ ok: true, acked: done, version: VERSION });
+}
+
+/** 要更換密鑰時，在編輯器選這個函式按「執行」，再到記帳工具重新設定 */
+function resetInboxKey() {
+  PropertiesService.getScriptProperties().deleteProperty('INBOX_KEY');
+  Logger.log('已清除密鑰，請到記帳工具重新設定捷徑記帳');
 }
 
 /** 解析並嚴格檢查代號（只允許英數、點、橫線），避免被塞入公式 */
@@ -1057,11 +1357,92 @@ function json_(obj) {
 }
 
 /** 在編輯器裡按「執行」這個函式，可以先測試是否能抓到股價 */
+/** 測試簡訊解析：在編輯器選這個函式按「執行」，到「執行紀錄」看結果 */
+function testSms() {
+  Logger.log(JSON.stringify(parseSms_('小心詐騙！星展卡末碼 4036 網路交易於 VIESHOW CINEMA  新臺幣 TWD 596.00，驗證碼 234514')));
+}
+
 function testRun() {
   var out = doGet({ parameter: { codes: 'TW:2330,TW:00878,US:QQQ' } });
   Logger.log(out.getContent());
 }
 </script>
+
+    <!-- 捷徑記帳：待確認 Modal -->
+    <div id="inbox-review-modal" class="modal fixed inset-0 z-[60] flex items-end sm:items-center justify-center hidden">
+        <div class="modal-backdrop absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeInboxReview()"></div>
+        <div class="modal-panel sm:max-w-lg">
+            <div class="modal-head">
+                <h3 class="text-lg font-bold text-primary flex items-center gap-2"><i class="fas fa-inbox text-accent"></i>捷徑記帳待確認</h3>
+                <button class="icon-btn" onclick="closeInboxReview()" aria-label="關閉"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="px-5 pb-6 pb-safe space-y-3">
+                <p class="text-xs text-gray-500">補上分類和付款方式後按「入帳」。勾選「記住這張卡」後，下次同一張 Apple Pay 卡會自動對應。</p>
+                <div id="inbox-review-list" class="space-y-3"></div>
+                <button onclick="saveAllInboxReview()" id="inbox-save-all" class="btn-primary w-full"><i class="fas fa-check-double"></i>全部入帳</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 捷徑設定教學 Modal -->
+    <div id="shortcut-guide-modal" class="modal fixed inset-0 z-[60] flex items-end sm:items-center justify-center hidden">
+        <div class="modal-backdrop absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeShortcutGuide()"></div>
+        <div class="modal-panel sm:max-w-lg">
+            <div class="modal-head flex-col items-stretch gap-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-primary flex items-center gap-2"><i class="fas fa-wand-magic-sparkles text-accent"></i>建立 iPhone 捷徑</h3>
+                    <button class="icon-btn" onclick="closeShortcutGuide()" aria-label="關閉"><i class="fas fa-xmark"></i></button>
+                </div>
+                <div class="seg">
+                    <button onclick="switchGuideTab('quick')" class="seg-btn !px-1 guide-tab-btn is-active" data-target="guide-quick">快速記帳</button>
+                    <button onclick="switchGuideTab('applepay')" class="seg-btn !px-1 guide-tab-btn" data-target="guide-applepay">Apple Pay</button>
+                    <button onclick="switchGuideTab('sms')" class="seg-btn !px-1 guide-tab-btn" data-target="guide-sms">刷卡簡訊</button>
+                </div>
+            </div>
+            <div class="px-5 pb-6 pb-safe text-sm">
+                <div id="guide-copy-box" class="rounded-xl bg-secondary/70 p-3 mb-4 space-y-2"></div>
+                <div id="guide-quick" class="guide-tab-content"></div>
+                <div id="guide-applepay" class="guide-tab-content hidden"></div>
+                <div id="guide-sms" class="guide-tab-content hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 帳單明細比對 Modal -->
+    <div id="statement-modal" class="modal fixed inset-0 z-[60] flex items-end sm:items-center justify-center hidden">
+        <div class="modal-backdrop absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeStatementModal()"></div>
+        <div class="modal-panel sm:max-w-lg">
+            <div class="modal-head">
+                <div class="min-w-0">
+                    <h3 class="text-lg font-bold text-primary flex items-center gap-2"><i class="fas fa-paste text-accent"></i>帳單明細比對</h3>
+                    <p id="stmt-card-name" class="text-xs text-gray-500 truncate"></p>
+                </div>
+                <button class="icon-btn" onclick="closeStatementModal()" aria-label="關閉"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="px-5 pb-6 pb-safe space-y-3">
+                <details class="rounded-xl bg-secondary/70 p-3 text-xs text-gray-600">
+                    <summary class="font-bold text-primary cursor-pointer">怎麼複製帳單文字？</summary>
+                    <ol class="list-decimal pl-4 mt-2 space-y-1">
+                        <li>在銀行 App 打開這張卡的帳單明細，截圖（一頁不夠就多截幾張）</li>
+                        <li>到「照片」打開截圖，<b>長按畫面上的文字</b>，選「全選」→「拷貝」</li>
+                        <li>回來貼在下面。有多張截圖就一張一張貼，接在後面即可</li>
+                    </ol>
+                </details>
+                <textarea id="stmt-text" rows="6" class="w-full p-3 rounded-xl border border-line bg-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" placeholder="在這裡貼上帳單明細文字…"></textarea>
+                <div class="flex gap-2">
+                    <select id="stmt-format" class="field-sm !w-auto flex-1">
+                        <option value="auto">帳單格式：自動判斷</option>
+                        <option value="datefirst">國泰／台新（日期在前）</option>
+                        <option value="dbs">星展（消費日）</option>
+                        <option value="esun">玉山（日期在後）</option>
+                    </select>
+                    <button onclick="document.getElementById('stmt-text').value=''; document.getElementById('stmt-results').innerHTML='';" class="h-9 px-3 rounded-lg bg-secondary text-xs font-bold text-primary shrink-0">清空</button>
+                </div>
+                <button onclick="runStatementMatch()" class="btn-primary w-full"><i class="fas fa-magnifying-glass"></i>開始比對</button>
+                <div id="stmt-results"></div>
+            </div>
+        </div>
+    </div>
 
     <!-- 調整餘額 Modal -->
     <div id="adjust-balance-modal" class="modal fixed inset-0 z-[60] flex items-end sm:items-center justify-center hidden">
@@ -1715,6 +2096,12 @@ function testRun() {
             appData.stockApiUrl = typeof p.stockApiUrl === 'string' ? p.stockApiUrl : '';
             appData.stockPricesUpdatedAt = p.stockPricesUpdatedAt || null;
             appData.stockPricesMissing = Array.isArray(p.stockPricesMissing) ? p.stockPricesMissing : [];
+            appData.inboxKey = typeof p.inboxKey === 'string' ? p.inboxKey : '';
+            appData.inboxEnabled = !!p.inboxEnabled;
+            appData.inboxCardMap = (p.inboxCardMap && typeof p.inboxCardMap === 'object') ? p.inboxCardMap : {};
+            appData.pendingInbox = Array.isArray(p.pendingInbox) ? p.pendingInbox : [];
+            appData.inboxSeenIds = Array.isArray(p.inboxSeenIds) ? p.inboxSeenIds : [];
+            appData.inboxLastSync = p.inboxLastSync || null;
             if (!appData.exchangeRates || typeof appData.exchangeRates !== 'object') appData.exchangeRates = { TWD: 1, USD: 32.0, CNY: 4.4 };
             appData.exchangeRates.TWD = 1;
             // 讓既有程式碼直接使用同一份資料
@@ -1807,7 +2194,13 @@ function testRun() {
                     ratesManual: !!appData.ratesManual,
                     stockApiUrl: appData.stockApiUrl || '',
                     stockPricesUpdatedAt: appData.stockPricesUpdatedAt || null,
-                    stockPricesMissing: appData.stockPricesMissing || []
+                    stockPricesMissing: appData.stockPricesMissing || [],
+                    inboxKey: appData.inboxKey || '',
+                    inboxEnabled: !!appData.inboxEnabled,
+                    inboxCardMap: appData.inboxCardMap || {},
+                    pendingInbox: appData.pendingInbox || [],
+                    inboxSeenIds: (appData.inboxSeenIds || []).slice(-500),
+                    inboxLastSync: appData.inboxLastSync || null
                 };
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
             } catch (e) {
@@ -1921,6 +2314,7 @@ function testRun() {
             toggleNewAccountLinked();
             renderCategorySettings();
             renderGeneralSettings();
+            renderShortcutSettings();
             switchSettingsTab(typeof tab === 'string' ? tab : 'accounts');
         }
 
@@ -2581,6 +2975,819 @@ function testRun() {
             closeStockAutoModal();
             renderStockStatusAll();
             showAlert('info', '已停用自動更新股價');
+        }
+
+        // ===================== 捷徑記帳收件匣（透過自己的 Google 小程式） =====================
+        let inboxSyncing = false;
+        let inboxLastAttempt = 0;
+        const INBOX_MIN_INTERVAL_MS = 60 * 1000;
+
+        function inboxReady() {
+            return !!(appData.stockApiUrl && appData.inboxEnabled && appData.inboxKey);
+        }
+
+        function makeInboxKey() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+            const arr = new Uint32Array(24);
+            (window.crypto || window.msCrypto).getRandomValues(arr);
+            return Array.from(arr, n => chars[n % chars.length]).join('');
+        }
+
+        function scriptUrl(params) {
+            const url = appData.stockApiUrl;
+            const q = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+            return url + (url.includes('?') ? '&' : '?') + q;
+        }
+
+        function allPayMethods() {
+            return [...appData.assets.map(a => a.name), appData.jointAccount.name, ...appData.creditCards.map(c => c.name)];
+        }
+
+        function normalizeName(s) {
+            return String(s || '').toLowerCase().replace(/[\s()（）&＆\-_·・.]/g, '');
+        }
+
+        // 依序：完全符合 → 記住的對應 → 名稱相近的信用卡
+        function resolveInboxAccount(item) {
+            const methods = allPayMethods();
+            if (item.account && methods.includes(item.account)) return item.account;
+            const hint = String(item.cardHint || '').trim();
+            if (hint && appData.inboxCardMap[hint] && methods.includes(appData.inboxCardMap[hint])) return appData.inboxCardMap[hint];
+            const h = normalizeName(hint);
+            if (h.length >= 2) {
+                const hits = appData.creditCards.filter(c => {
+                    const n = normalizeName(c.name);
+                    return n.includes(h) || h.includes(n);
+                });
+                if (hits.length === 1) return hits[0].name;
+            }
+            return '';
+        }
+
+        function isValidInboxName(type, name) {
+            if (!name) return false;
+            if (type === 'income') return INCOME_CATEGORIES_LIST.includes(name);
+            const i = name.indexOf('-');
+            if (i <= 0) return false;
+            const cat = name.slice(0, i), sub = name.slice(i + 1);
+            return !!EXPENSE_CATEGORIES[cat] && EXPENSE_CATEGORIES[cat].includes(sub);
+        }
+
+        function inboxNote(item) {
+            return [item.merchant, item.note].filter(x => x && String(x).trim()).join('｜');
+        }
+
+        function inboxTimestamp(item) {
+            const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(item.date || ''));
+            if (m) return new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0).getTime();
+            return item.createdAt ? Number(item.createdAt) : Date.now();
+        }
+
+        function commitInboxItem(item) {
+            addTransaction({
+                id: newTxId(),
+                name: item.name,
+                amount: parseFloat(item.amount),
+                currency: item.currency || 'TWD',
+                type: item.type === 'income' ? 'income' : 'expense',
+                account: item.account,
+                toAccount: null,
+                timestamp: inboxTimestamp(item),
+                note: inboxNote(item),
+                isNextCycle: false,
+                targetAmount: null,
+                source: item.source || 'shortcut'
+            });
+        }
+
+        async function syncInbox(manual = false) {
+            if (!inboxReady() || inboxSyncing) return;
+            if (!manual && Date.now() - inboxLastAttempt < INBOX_MIN_INTERVAL_MS) return;
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                if (manual) showAlert('warning', '目前沒有網路，無法收取捷徑記帳');
+                return;
+            }
+            inboxSyncing = true;
+            inboxLastAttempt = Date.now();
+            renderShortcutSettings();
+            try {
+                const data = await fetchJsonWithTimeout(scriptUrl({ action: 'inbox', key: appData.inboxKey }), 30000);
+                if (!data || data.ok !== true) throw new Error((data && data.error) || '回傳格式不正確');
+                const seen = new Set(appData.inboxSeenIds || []);
+                let saved = 0, pending = 0;
+                const ackIds = [];
+                (data.items || []).forEach(raw => {
+                    if (!raw || !raw.id) return;
+                    ackIds.push(raw.id);
+                    if (seen.has(raw.id)) return;
+                    seen.add(raw.id);
+                    const amount = parseFloat(raw.amount);
+                    if (!(amount > 0)) return;
+                    const item = {
+                        id: raw.id, amount, currency: raw.currency || 'TWD',
+                        type: raw.type === 'income' ? 'income' : 'expense',
+                        name: String(raw.name || '').trim(), date: raw.date, createdAt: raw.createdAt,
+                        cardHint: String(raw.cardHint || '').trim(), merchant: String(raw.merchant || '').trim(),
+                        note: String(raw.note || '').trim(), source: raw.source || 'shortcut'
+                    };
+                    item.account = resolveInboxAccount({ account: String(raw.account || '').trim(), cardHint: item.cardHint });
+                    if (item.account && isValidInboxName(item.type, item.name)) {
+                        commitInboxItem(item);
+                        saved++;
+                    } else {
+                        item.rawAccount = String(raw.account || '').trim();
+                        appData.pendingInbox.push(item);
+                        pending++;
+                    }
+                });
+                appData.inboxSeenIds = [...seen].slice(-500);
+                appData.inboxLastSync = Date.now();
+                if (saved) applyTransactionsToAssets();
+                saveData();
+                if (saved) refreshAllViews();
+                updateInboxBanners();
+                if (ackIds.length) {
+                    // 回報已收；就算失敗，下次也會因為記得 id 而不重複入帳
+                    fetchJsonWithTimeout(scriptUrl({ action: 'ack', key: appData.inboxKey, ids: ackIds.join(',') }), 30000).catch(() => {});
+                }
+                if (saved || pending) {
+                    const msg = `收到 ${saved + pending} 筆捷徑記帳` + (pending ? `，${pending} 筆待確認` : '，已自動入帳');
+                    showAlert(pending ? 'info' : 'success', msg);
+                } else if (manual) {
+                    showAlert('info', '沒有新的捷徑記帳');
+                }
+            } catch (err) {
+                console.error('捷徑記帳收件失敗', err);
+                if (manual) showAlert('danger', `收件失敗（${err && err.name === 'AbortError' ? '連線逾時' : (err && err.message) || '連線失敗'}）`);
+            } finally {
+                inboxSyncing = false;
+                renderShortcutSettings();
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') syncInbox(false);
+        });
+
+        function updateInboxBanners() {
+            const n = (appData.pendingInbox || []).length;
+            document.querySelectorAll('.inbox-banner').forEach(el => {
+                el.classList.toggle('hidden', n === 0);
+                const t = el.querySelector('.inbox-banner-text');
+                if (t) t.textContent = `有 ${n} 筆捷徑記帳待確認`;
+            });
+        }
+
+        // ---------- 待確認清單 ----------
+        function inboxRowHtml(item, idx) {
+            const isExp = item.type !== 'income';
+            const cat = isExp && item.name.includes('-') ? item.name.slice(0, item.name.indexOf('-')) : (isExp ? '' : item.name);
+            const sub = isExp && item.name.includes('-') ? item.name.slice(item.name.indexOf('-') + 1) : '';
+            const catList = isExp ? Object.keys(EXPENSE_CATEGORIES) : INCOME_CATEGORIES_LIST;
+            const catOpts = `<option value="" ${catList.includes(cat) ? '' : 'selected'} disabled>分類</option>` +
+                catList.map(c => `<option value="${escapeHtml(c)}" ${c === cat ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+            const subList = isExp ? (EXPENSE_CATEGORIES[cat] || []) : [];
+            const subOpts = `<option value="" ${subList.includes(sub) ? '' : 'selected'} disabled>細項</option>` +
+                subList.map(x => `<option value="${escapeHtml(x)}" ${x === sub ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
+            const methods = allPayMethods();
+            const accOpts = `<option value="" ${methods.includes(item.account) ? '' : 'selected'} disabled>付款方式</option>` +
+                methods.map(m => `<option value="${escapeHtml(m)}" ${m === item.account ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
+            const srcLabel = { applepay: 'Apple Pay', sms: '簡訊', quick: '快速記帳' }[item.source] || '捷徑';
+            const hintHtml = item.cardHint
+                ? `<label class="flex items-center gap-1.5 text-[11px] text-gray-500 mt-1 cursor-pointer"><input type="checkbox" data-f="remember" class="h-4 w-4 accent-[#9C7F66]" checked>記住「${escapeHtml(item.cardHint)}」就是這張卡</label>` : '';
+            return `
+                <div class="inbox-row rounded-xl border border-line p-3" data-idx="${idx}">
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                        <div class="min-w-0">
+                            <p class="font-bold text-primary tabular-nums">${isExp ? '-' : '+'}${formatCurrency(item.amount, item.currency || 'TWD')} <span class="text-xs font-normal text-gray-400">${escapeHtml(item.currency || 'TWD')}</span></p>
+                            <p class="text-xs text-gray-500 truncate">${escapeHtml(item.date || '')} · ${srcLabel}${item.merchant ? ' · ' + escapeHtml(item.merchant) : ''}${item.cardHint ? ' · ' + escapeHtml(item.cardHint) : ''}</p>
+                        </div>
+                        <button data-act="del" class="icon-btn !w-8 !h-8 shrink-0 hover:!text-red-600 hover:!bg-red-50" title="刪除"><i class="fas fa-trash-alt text-xs"></i></button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <select data-f="cat" class="field-sm">${catOpts}</select>
+                        <select data-f="sub" class="field-sm" ${isExp ? '' : 'disabled'}>${isExp ? subOpts : '<option>-</option>'}</select>
+                        <select data-f="account" class="field-sm col-span-2">${accOpts}</select>
+                    </div>
+                    ${hintHtml}
+                    <button data-act="save" class="btn-accent w-full !h-9 text-sm mt-2"><i class="fas fa-check"></i>入帳</button>
+                </div>`;
+        }
+
+        function renderInboxReview() {
+            const list = document.getElementById('inbox-review-list');
+            if (!list) return;
+            const items = appData.pendingInbox || [];
+            list.innerHTML = items.length ? items.map(inboxRowHtml).join('') : '<p class="text-center text-gray-400 py-6">沒有待確認的紀錄</p>';
+            document.getElementById('inbox-save-all').classList.toggle('hidden', items.length < 2);
+        }
+
+        function openInboxReview() {
+            renderInboxReview();
+            document.getElementById('inbox-review-modal').classList.remove('hidden');
+        }
+        function closeInboxReview() {
+            document.getElementById('inbox-review-modal').classList.add('hidden');
+        }
+
+        function readInboxRow(el) {
+            const item = appData.pendingInbox[+el.dataset.idx];
+            const cat = el.querySelector('[data-f="cat"]').value;
+            const sub = el.querySelector('[data-f="sub"]').value;
+            const account = el.querySelector('[data-f="account"]').value;
+            const remember = el.querySelector('[data-f="remember"]');
+            const name = item.type === 'income' ? cat : (cat && sub ? `${cat}-${sub}` : '');
+            return { item, name, account, remember: !!(remember && remember.checked) };
+        }
+
+        // 回傳是否入帳成功
+        function commitInboxRow(el) {
+            const { item, name, account, remember } = readInboxRow(el);
+            if (!account || !isValidInboxName(item.type, name)) {
+                el.classList.add('!border-red-400', 'ring-2', 'ring-red-200');
+                return false;
+            }
+            if (remember && item.cardHint) appData.inboxCardMap[item.cardHint] = account;
+            commitInboxItem({ ...item, name, account });
+            item._done = true;
+            return true;
+        }
+
+        function finishInboxCommit(count) {
+            appData.pendingInbox = appData.pendingInbox.filter(i => !i._done);
+            applyTransactionsToAssets();
+            saveData();
+            refreshAllViews();
+            updateInboxBanners();
+            renderInboxReview();
+            if (!appData.pendingInbox.length) closeInboxReview();
+            if (count) showAlert('success', `已入帳 ${count} 筆`);
+        }
+
+        function saveAllInboxReview() {
+            let ok = 0, bad = 0;
+            document.querySelectorAll('#inbox-review-list .inbox-row').forEach(el => { commitInboxRow(el) ? ok++ : bad++; });
+            finishInboxCommit(ok);
+            if (bad) showAlert('warning', `還有 ${bad} 筆缺分類或付款方式`);
+        }
+
+        (function bindInboxReviewEvents() {
+            const list = document.getElementById('inbox-review-list');
+            if (!list) return;
+            list.addEventListener('change', e => {
+                const row = e.target.closest('.inbox-row');
+                if (!row) return;
+                row.classList.remove('!border-red-400', 'ring-2', 'ring-red-200');
+                if (e.target.dataset.f === 'cat') {
+                    const item = appData.pendingInbox[+row.dataset.idx];
+                    if (item.type === 'income') return;
+                    const subs = EXPENSE_CATEGORIES[e.target.value] || [];
+                    row.querySelector('[data-f="sub"]').innerHTML = '<option value="" selected disabled>細項</option>' +
+                        subs.map(x => `<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');
+                }
+            });
+            list.addEventListener('click', async e => {
+                const btn = e.target.closest('[data-act]');
+                if (!btn) return;
+                const row = btn.closest('.inbox-row');
+                if (btn.dataset.act === 'save') {
+                    if (commitInboxRow(row)) finishInboxCommit(1);
+                    else showAlert('warning', '請選擇分類和付款方式');
+                } else if (btn.dataset.act === 'del') {
+                    const ok = await showConfirm({ title: '刪除這筆捷徑記帳？', message: '刪除後不會入帳。', confirmText: '刪除', danger: true });
+                    if (!ok) return;
+                    appData.pendingInbox.splice(+row.dataset.idx, 1);
+                    saveData();
+                    updateInboxBanners();
+                    renderInboxReview();
+                }
+            });
+        })();
+
+        // ---------- 設定頁 ----------
+        async function enableInbox() {
+            if (!appData.stockApiUrl) { openStockAutoModal(); return; }
+            const btn = document.getElementById('inbox-enable-btn');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-rotate fa-spin"></i>連線中…'; }
+            try {
+                const ping = await fetchJsonWithTimeout(scriptUrl({ action: 'ping' }), 20000);
+                if (!ping || !(ping.version >= 2)) {
+                    renderShortcutSettings('needUpdate');
+                    return;
+                }
+                const key = appData.inboxKey || makeInboxKey();
+                const res = await fetchJsonWithTimeout(scriptUrl({ action: 'setkey', key }), 20000);
+                if (!res || !res.ok) {
+                    renderShortcutSettings(res && res.code === 'key_taken' ? 'keyTaken' : 'error');
+                    return;
+                }
+                appData.inboxKey = key;
+                appData.inboxEnabled = true;
+                saveData();
+                renderShortcutSettings();
+                showAlert('success', '捷徑記帳已啟用，接著照教學建立捷徑');
+                openShortcutGuide();
+            } catch (err) {
+                // 舊版小程式不認得 ping，也會走到這裡或回傳股價格式
+                renderShortcutSettings('needUpdate');
+            }
+        }
+
+        async function disableInbox() {
+            const ok = await showConfirm({ title: '停用捷徑記帳？', message: '已建立的捷徑送出的記帳會留在 Google 小程式裡，重新啟用後就能收回來。', confirmText: '停用', danger: true });
+            if (!ok) return;
+            appData.inboxEnabled = false;
+            saveData();
+            renderShortcutSettings();
+        }
+
+        async function copyText(text, label) {
+            let ok = false;
+            try {
+                if (navigator.clipboard && window.isSecureContext !== false) { await navigator.clipboard.writeText(text); ok = true; }
+            } catch (e) {}
+            if (!ok) {
+                const ta = document.createElement('textarea');
+                ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+                document.body.appendChild(ta); ta.select();
+                try { ok = document.execCommand('copy'); } catch (e) {}
+                ta.remove();
+            }
+            showAlert(ok ? 'success' : 'warning', ok ? `已複製${label}` : '複製失敗，請長按文字手動複製');
+        }
+
+        function expenseNameList() {
+            return Object.entries(EXPENSE_CATEGORIES).flatMap(([c, subs]) => subs.map(s => `${c}-${s}`)).join('\n');
+        }
+        function payMethodList() {
+            return allPayMethods().join('\n');
+        }
+
+        function renderShortcutSettings(problem) {
+            const body = document.getElementById('shortcut-settings-body');
+            if (!body) return;
+            const step = (n, html) => `<div class="flex gap-3"><span class="w-6 h-6 rounded-full bg-accent text-white text-xs font-bold grid place-items-center shrink-0">${n}</span><div class="min-w-0 flex-1">${html}</div></div>`;
+            if (!appData.stockApiUrl) {
+                body.innerHTML = `<div class="rounded-xl border border-dashed border-accent/50 bg-accent/5 p-3">
+                    <p class="text-sm font-bold text-primary">需要先設定 Google 小程式</p>
+                    <p class="text-xs text-gray-500 mt-1">捷徑記帳和股價自動更新用的是同一支小程式。</p>
+                    <button onclick="closeSettingsModal(); openStockAutoModal();" class="btn-accent w-full !h-10 text-sm mt-2">前往設定</button></div>`;
+                return;
+            }
+            if (!appData.inboxEnabled) {
+                let warn = '';
+                if (problem === 'needUpdate') warn = `<div class="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900 space-y-2">
+                    <p class="font-bold">請先把 Google 小程式更新到最新版</p>
+                    ${step(1, '<button onclick="copyGasCode()" class="h-8 px-3 rounded-lg bg-amber-600 text-white text-xs font-bold">複製新版程式碼</button>')}
+                    ${step(2, '<p class="text-xs">電腦打開那份試算表 →「擴充功能」→「Apps Script」→ 全選刪掉，貼上新程式碼 → 儲存</p>')}
+                    ${step(3, '<p class="text-xs">右上「部署」→「<b>管理部署作業</b>」→ 鉛筆圖示 → 版本選「<b>新版本</b>」→「部署」（網址不會變，股價功能照常）</p>')}
+                    ${step(4, '<p class="text-xs">回來再按一次「啟用捷徑記帳」</p>')}</div>`;
+                else if (problem === 'keyTaken') warn = `<div class="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-800">這支小程式已經和另一個裝置綁定密鑰。若要改用這台，請在 Apps Script 編輯器上方選「resetInboxKey」按「執行」，再回來啟用。</div>`;
+                else if (problem === 'error') warn = `<div class="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-800">連線失敗，請稍後再試。</div>`;
+                body.innerHTML = `${warn}
+                    <button id="inbox-enable-btn" onclick="enableInbox()" class="btn-primary w-full"><i class="fas fa-bolt"></i>啟用捷徑記帳</button>
+                    <p class="text-[11px] text-gray-400">啟用時會產生一組只有你知道的密鑰，捷徑送記帳時要附上它，避免別人知道網址就能亂送資料。</p>`;
+                return;
+            }
+            const pending = (appData.pendingInbox || []).length;
+            const maps = Object.entries(appData.inboxCardMap || {});
+            body.innerHTML = `
+                <div class="rounded-xl border border-line bg-secondary/50 p-3">
+                    <div class="flex items-center gap-3">
+                        <span class="w-9 h-9 rounded-full bg-green-50 text-green-700 grid place-items-center shrink-0"><i class="fas fa-inbox"></i></span>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-bold text-primary">捷徑記帳已啟用</p>
+                            <p class="text-xs text-gray-500">上次收件：${formatRateTime(appData.inboxLastSync)}${pending ? `　·　<b class="text-blue-700">${pending} 筆待確認</b>` : ''}</p>
+                        </div>
+                        <button onclick="syncInbox(true)" class="h-9 px-3 rounded-lg bg-white border border-line text-xs font-bold text-primary shrink-0" ${inboxSyncing ? 'disabled' : ''}><i class="fas fa-rotate mr-1 ${inboxSyncing ? 'fa-spin' : ''}"></i>立即收件</button>
+                    </div>
+                    ${pending ? '<button onclick="closeSettingsModal(); openInboxReview();" class="btn-ghost w-full !h-9 text-sm mt-2 !bg-white border border-line">查看待確認</button>' : ''}
+                </div>
+                <button onclick="openShortcutGuide()" class="btn-accent w-full"><i class="fas fa-book-open"></i>建立 iPhone 捷徑（教學）</button>
+                <div class="rounded-xl border border-line p-3">
+                    <p class="text-sm font-bold text-primary mb-1">Apple Pay／簡訊卡片對應</p>
+                    <p class="text-xs text-gray-500 mb-2">在「待確認」勾選「記住這張卡」後會出現在這裡。</p>
+                    ${maps.length ? maps.map(([hint, acc]) => `
+                        <div class="flex items-center justify-between gap-2 py-1.5 text-sm border-t border-line first:border-0">
+                            <span class="min-w-0 truncate"><span class="text-gray-500">${escapeHtml(hint)}</span> → <b class="text-primary">${escapeHtml(acc)}</b></span>
+                            <button onclick="deleteCardMap(this.dataset.hint)" data-hint="${escapeHtml(hint)}" class="icon-btn !w-7 !h-7 shrink-0 hover:!text-red-600"><i class="fas fa-xmark text-xs"></i></button>
+                        </div>`).join('') : '<p class="text-xs text-gray-400">尚未設定</p>'}
+                </div>
+                <button onclick="disableInbox()" class="w-full h-10 rounded-xl text-sm text-gray-500 hover:text-red-600 hover:bg-red-50">停用捷徑記帳</button>`;
+        }
+
+        function deleteCardMap(hint) {
+            delete appData.inboxCardMap[hint];
+            saveData();
+            renderShortcutSettings();
+        }
+
+        // ---------- 捷徑教學 ----------
+        function openShortcutGuide() {
+            renderShortcutGuide();
+            document.getElementById('shortcut-guide-modal').classList.remove('hidden');
+            // 簡訊記帳需要第 3 版小程式
+            fetchJsonWithTimeout(scriptUrl({ action: 'ping' }), 15000).then(r => {
+                const warn = document.getElementById('guide-sms-version');
+                if (warn) warn.classList.toggle('hidden', !!(r && r.version >= 3));
+            }).catch(() => {});
+        }
+        function closeShortcutGuide() {
+            document.getElementById('shortcut-guide-modal').classList.add('hidden');
+        }
+        function switchGuideTab(name) {
+            document.querySelectorAll('.guide-tab-content').forEach(el => el.classList.toggle('hidden', el.id !== `guide-${name}`));
+            document.querySelectorAll('.guide-tab-btn').forEach(b => b.classList.toggle('is-active', b.dataset.target === `guide-${name}`));
+        }
+
+        function renderShortcutGuide() {
+            const copyRow = (label, value, display) => `
+                <div class="flex items-center gap-2">
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[11px] text-gray-500">${label}</p>
+                        <p class="text-xs font-mono text-primary truncate">${escapeHtml(display || value)}</p>
+                    </div>
+                    <button onclick="copyText(this.dataset.v, '${label}')" data-v="${escapeHtml(value)}" class="h-8 px-3 rounded-lg bg-white border border-line text-xs font-bold shrink-0"><i class="fas fa-copy mr-1"></i>複製</button>
+                </div>`;
+            document.getElementById('guide-copy-box').innerHTML = `
+                <p class="text-xs font-bold text-primary">建立捷徑時會用到（點「複製」再到捷徑 App 貼上）</p>
+                ${copyRow('網址', appData.stockApiUrl)}
+                ${copyRow('密鑰', appData.inboxKey)}
+                ${copyRow('分類清單', expenseNameList(), `${Object.values(EXPENSE_CATEGORIES).flat().length} 個分類，例如 飲食-午餐`)}
+                ${copyRow('付款方式清單', payMethodList(), `${allPayMethods().length} 個帳戶與信用卡`)}`;
+
+            const li = (n, html) => `<li class="flex gap-3"><span class="w-6 h-6 rounded-full bg-accent text-white text-xs font-bold grid place-items-center shrink-0">${n}</span><div class="min-w-0 flex-1 text-gray-600">${html}</div></li>`;
+            const b = s => `<b class="text-primary">${s}</b>`;
+            const fields = (extra) => `<div class="mt-1.5 rounded-lg bg-secondary/70 p-2 text-xs font-mono leading-relaxed">
+                action ＝ add<br>key ＝ （貼上密鑰）<br>${extra}</div>`;
+
+            document.getElementById('guide-quick').innerHTML = `
+                <p class="text-gray-500 mb-3">做好後放在主畫面，點一下輸入金額、選分類和付款方式就記好，不用打開記帳。</p>
+                <ol class="space-y-3">
+                    ${li(1, `打開 iPhone 的「${b('捷徑')}」App → 右上「＋」→ 上方名稱改成「記一筆」`)}
+                    ${li(2, `搜尋並加入「${b('要求輸入')}」→ 類型改「數字」，提示寫「金額」`)}
+                    ${li(3, `加入「${b('文字')}」→ 貼上${b('分類清單')} → 加入「${b('分割文字')}」（以「新的一行」分割）→ 加入「${b('從清單中選擇')}」，提示寫「分類」`)}
+                    ${li(4, `再加一次「${b('文字')}」→ 貼上${b('付款方式清單')} →「${b('分割文字')}」→「${b('從清單中選擇')}」，提示寫「付款方式」`)}
+                    ${li(5, `加入「${b('取得 URL 內容')}」→ URL 貼上${b('網址')} → 點「顯示更多」：方法選 ${b('POST')}、要求本文選 ${b('JSON')}，新增這幾個「文字」欄位：
+                        ${fields('amount ＝ 「提供的輸入」（第 2 步的金額）<br>name ＝ 第 3 步的「已選取項目」<br>account ＝ 第 4 步的「已選取項目」<br>source ＝ quick')}
+                        <p class="text-[11px] text-gray-400 mt-1">選變數時點欄位右邊，從上方變數列挑；兩個「已選取項目」要按順序對應。</p>`)}
+                    ${li(6, `（選用）加入「${b('顯示通知')}」，內容寫「已記帳 💰」`)}
+                    ${li(7, `完成後在捷徑上長按 →「分享」→「${b('加入主畫面')}」。也可以放進小工具、設定「背面輕點」或動作按鈕`)}
+                </ol>
+                <p class="text-xs text-gray-400 mt-3">送出後，下次打開記帳工具就會自動入帳。</p>`;
+
+            document.getElementById('guide-applepay').innerHTML = `
+                <p class="text-gray-500 mb-3">用 Apple Pay 感應付款後，iPhone 會跳出通知，點一下選分類就記好。金額、商家、哪張卡會自動帶入。</p>
+                <ol class="space-y-3">
+                    ${li(1, `「捷徑」App 下方「${b('自動化')}」→「＋」→ 選「${b('交易')}」`)}
+                    ${li(2, `卡片勾選你的信用卡（可全選）→ 選「${b('立即執行')}」→「下一步」→「新增空白捷徑」`)}
+                    ${li(3, `加入「${b('文字')}」→ 貼上${b('分類清單')} →「${b('分割文字')}」→「${b('從清單中選擇')}」，提示寫「分類」`)}
+                    ${li(4, `加入「${b('取得 URL 內容')}」→ URL 貼上${b('網址')} → 方法 ${b('POST')}、要求本文 ${b('JSON')}，新增欄位：
+                        ${fields('amount ＝ 「捷徑輸入」→ 點它選「金額」<br>merchant ＝ 「捷徑輸入」→ 選「商家」<br>cardHint ＝ 「捷徑輸入」→ 選「卡片或票卡」<br>name ＝ 「已選取項目」<br>source ＝ applepay')}`)}
+                    ${li(5, `（選用）加入「${b('顯示通知')}」，內容寫「已記帳 💰」`)}
+                </ol>
+                <div class="rounded-xl bg-blue-50 text-blue-900 text-xs p-3 mt-3 space-y-1">
+                    <p>• 第一次收到時，因為還不知道「玉山 Unicard」對應哪張卡，會出現在「待確認」。選好卡片並勾「記住」，之後就會自動入帳。</p>
+                    <p>• 懶人版：第 3 步可以省略、name 欄位也不填，全部進「待確認」再一次補分類。</p>
+                    <p>• 只有 Apple Pay 感應才會觸發；刷實體卡、網購請用「記一筆」或月底批次補帳。</p>
+                </div>`;
+            document.getElementById('guide-sms').innerHTML = `
+                <div id="guide-sms-version" class="hidden rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 mb-3">
+                    <p class="font-bold mb-1">你的 Google 小程式還不是最新版</p>
+                    <p>簡訊記帳需要第 3 版：<button onclick="copyGasCode()" class="underline font-bold">複製新版程式碼</button>，貼到 Apps Script 儲存後，「部署」→「管理部署作業」→ 鉛筆 → 版本選「新版本」→「部署」。</p>
+                </div>
+                <p class="text-gray-500 mb-3">收到銀行的刷卡／驗證碼簡訊時，自動跳出選分類。不是刷卡的簡訊會被安靜略過，不會再誤跳。</p>
+                <p class="font-bold text-primary mb-2">第一部分：建立「簡訊記帳」捷徑</p>
+                <ol class="space-y-3 mb-4">
+                    ${li(1, `「捷徑」App →「＋」→ 名稱改成「${b('簡訊記帳')}」`)}
+                    ${li(2, `加入「${b('取得 URL 內容')}」→ URL 貼上${b('網址')} → 方法 ${b('POST')}、要求本文 ${b('JSON')}，新增欄位：
+                        ${fields('text ＝ 「捷徑輸入」<br>source ＝ sms').replace('action ＝ add', 'action ＝ sms')}`)}
+                    ${li(3, `加入「${b('取得字典值')}」→ 取得「${b('go')}」的值，來源選上一步的「URL 內容」`)}
+                    ${li(4, `加入「${b('如果')}」→ 條件：「字典值」${b('是')}「${b('yes')}」。以下 5～9 步都放在「如果」裡面`)}
+                    ${li(5, `「${b('取得字典值')}」→ 取得「${b('summary')}」，來源選第 2 步的「URL 內容」`)}
+                    ${li(6, `「${b('文字')}」貼上${b('分類清單')} →「${b('分割文字')}」→「${b('從清單中選擇')}」，提示欄插入第 5 步的「字典值」（會顯示「玉山・NT$1120」）`)}
+                    ${li(7, `「${b('取得字典值')}」→ 取得「${b('id')}」，來源選第 2 步的「URL 內容」`)}
+                    ${li(8, `「${b('取得 URL 內容')}」→ 同一個網址、${b('POST')}、${b('JSON')}：
+                        ${fields('id ＝ 第 7 步的「字典值」<br>name ＝ 「已選取項目」').replace('action ＝ add', 'action ＝ setname')}`)}
+                    ${li(9, `（選用）「${b('顯示通知')}」：已記帳 💰`)}
+                </ol>
+                <p class="font-bold text-primary mb-2">第二部分：建立 4 個自動化（每個關鍵字一個）</p>
+                <ol class="space-y-3">
+                    ${li(1, `「捷徑」App 下方「${b('自動化')}」→「＋」→「${b('訊息')}」→「訊息包含」輸入關鍵字 → 選「${b('立即執行')}」→「下一步」`)}
+                    ${li(2, `加入「${b('執行捷徑')}」→ 選「簡訊記帳」→ 點「輸入」選「${b('捷徑輸入')}」，再點它選「${b('內容')}」`)}
+                    ${li(3, `重複 1～2，用這 4 個關鍵字各做一個：
+                        <div class="mt-1.5 rounded-lg bg-secondary/70 p-2 text-xs leading-relaxed">
+                            <b>卡末碼</b>　星展、台新、國泰的驗證碼簡訊<br>
+                            <b>後四碼</b>　國泰的異常消費通知<br>
+                            <b>玉山卡</b>　玉山的驗證碼簡訊<br>
+                            <b>富邦华一</b>　富邦華一（注意是簡體「华」）
+                        </div>`)}
+                </ol>
+                <div class="rounded-xl bg-blue-50 text-blue-900 text-xs p-3 mt-3 space-y-1">
+                    <p>• 同一筆收到兩次驗證碼（例如玉山重試），20 分鐘內同卡同金額只會記一次。</p>
+                    <p>• 只收到驗證碼但最後沒付款的，會被記進去；月底用「貼上帳單明細」比對時，會列在「有記、但帳單上沒有」，刪掉即可。</p>
+                    <p>• 國泰、台新在已綁定的平台不一定會傳簡訊，這些請靠帳單比對補。</p>
+                    <p>• 懶人版：只做第 1～2 步，跳過選分類，10 分鐘後會出現在記帳工具的「待確認」。</p>
+                    <p>• 第一次遇到某張卡（例如「台新 4209」）會進「待確認」，選好卡片並勾「記住」，之後就會自動對應。</p>
+                </div>`;
+            switchGuideTab('quick');
+        }
+
+        // ===================== 帳單明細比對 =====================
+        // 把銀行 App 帳單截圖的文字（iPhone 原況文字）貼上，比對哪些有記、哪些沒記
+        const STMT_AMT_RE = /(-)?\s*(?:NT\$|TWD\s*\$?|\$)\s*(-)?\s*([\d,]+(?:\.\d+)?)/i;
+        const STMT_FULLDATE_RE = /(\d{4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})/;
+        const STMT_MD_RE = /(?:^|[^\d\/])(\d{1,2})\/(\d{1,2})(?![\d\/])/;
+        const STMT_NOISE_RE = /入帳起息日|末四碼|^共\s*\d+\s*筆|本期|帳單|全部信用卡|全部明細|各期|未入帳|消費分析|特店|^信用卡|幣別|^金額|^日期|帳務資訊|•{2,}|^\d{4}\s*\/\s*\d{1,2}$/;
+        const STMT_PAYMENT_RE = /扣繳|繳款|自動扣款|轉帳繳/;
+        const STMT_FEE_RE = /國外交易服務費|手續費|服務費/;
+        let stmtResult = null;
+
+        function stmtYearFor(m, d) {
+            const now = new Date();
+            let y = now.getFullYear();
+            if (new Date(y, m - 1, d) - now > 15 * 86400000) y -= 1;
+            return y;
+        }
+        function stmtIso(y, m, d) {
+            return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+        function stmtAmount(line) {
+            const m = STMT_AMT_RE.exec(line);
+            if (!m) return null;
+            const v = parseFloat(m[3].replace(/,/g, ''));
+            return isNaN(v) ? null : (m[1] || m[2] ? -v : v);
+        }
+        function stmtCleanMerchant(s) {
+            return String(s || '').replace(STMT_AMT_RE, '').replace(STMT_FULLDATE_RE, '').replace(/\s+/g, ' ').trim();
+        }
+        function stmtFinish(rec, out) {
+            if (!rec || rec.amount == null || !rec.date) return;
+            let kind = rec.amount < 0 ? 'credit' : 'expense';
+            if (STMT_PAYMENT_RE.test(rec.merchant)) kind = 'payment';
+            if (rec.credit) kind = 'credit';
+            out.push({ date: rec.date, amount: Math.abs(rec.amount), merchant: rec.merchant || '', kind });
+        }
+
+        // 國泰、台新：每筆以「2026/09/03」開頭
+        function parseStmtDateFirst(lines) {
+            const out = []; let rec = null;
+            lines.forEach(line => {
+                const fd = /^\s*(\d{4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})/.exec(line);
+                if (fd) {
+                    stmtFinish(rec, out);
+                    rec = { date: stmtIso(+fd[1], +fd[2], +fd[3]), amount: null, merchant: '' };
+                    line = line.slice(fd[0].length);
+                }
+                if (!rec) return;
+                const a = stmtAmount(line);
+                if (a != null && rec.amount == null) { rec.amount = a; line = line.replace(STMT_AMT_RE, ''); }
+                const text = stmtCleanMerchant(line);
+                if (text && !STMT_NOISE_RE.test(text) && !rec.merchant) rec.merchant = text;
+            });
+            stmtFinish(rec, out);
+            return out;
+        }
+
+        // 星展：商店名稱 → 消費日09/29 - 入帳日10/02 → NT$ 596
+        function parseStmtDbs(lines) {
+            const out = []; let rec = { texts: [] };
+            lines.forEach(line => {
+                const cd = /消費日\s*(\d{1,2})\s*\/\s*(\d{1,2})/.exec(line);
+                if (cd) rec.date = stmtIso(stmtYearFor(+cd[1], +cd[2]), +cd[1], +cd[2]);
+                const a = stmtAmount(line);
+                const text = stmtCleanMerchant(line.replace(/消費日.*$/, ''));
+                if (text && !STMT_NOISE_RE.test(text) && !/^\d{4}$/.test(text)) rec.texts.push(text);
+                if (a != null) {
+                    rec.amount = a;
+                    rec.merchant = rec.texts[rec.texts.length - 1] || '';
+                    stmtFinish(rec, out);
+                    rec = { texts: [] };
+                }
+            });
+            return out;
+        }
+
+        // 玉山：商店名稱 → TWD 125 → 09/04（日期在金額後面）
+        function parseStmtEsun(lines) {
+            const out = []; let rec = { texts: [] };
+            lines.forEach(line => {
+                if (rec.amount == null) {
+                    const a = stmtAmount(line);
+                    if (a != null) {
+                        rec.amount = a;
+                        rec.merchant = rec.texts[rec.texts.length - 1] || '';
+                        line = line.replace(STMT_AMT_RE, '');
+                    } else {
+                        const credit = /(折|回饋|點數|退款|退刷)/.test(line) && /([\d,]+)\s*元/.exec(line);
+                        if (credit) {
+                            rec.amount = -parseFloat(credit[1].replace(/,/g, ''));
+                            rec.credit = true;
+                            rec.merchant = stmtCleanMerchant(line);
+                            return;
+                        }
+                        const text = stmtCleanMerchant(line);
+                        if (text && !STMT_NOISE_RE.test(text)) rec.texts.push(text);
+                        return;
+                    }
+                }
+                const md = STMT_MD_RE.exec(line);
+                if (md) {
+                    rec.date = stmtIso(stmtYearFor(+md[1], +md[2]), +md[1], +md[2]);
+                    stmtFinish(rec, out);
+                    rec = { texts: [] };
+                }
+            });
+            return out;
+        }
+
+        function stmtFormatFor(cardName) {
+            if (/星展|DBS/i.test(cardName)) return 'dbs';
+            if (/玉山|E\.?SUN/i.test(cardName)) return 'esun';
+            return 'datefirst';
+        }
+
+        function parseStatement(text, format) {
+            const lines = String(text || '').normalize('NFKC').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            const parsers = { datefirst: parseStmtDateFirst, dbs: parseStmtDbs, esun: parseStmtEsun };
+            if (parsers[format]) return parsers[format](lines);
+            // 自動：三種都試，取辨識最多筆的
+            return Object.values(parsers).map(f => f(lines)).sort((a, b) => b.length - a.length)[0] || [];
+        }
+
+        function stmtDayDiff(isoA, tsB) {
+            const [y, m, d] = isoA.split('-').map(Number);
+            const a = new Date(y, m - 1, d, 12).getTime();
+            const b = new Date(tsB); b.setHours(12, 0, 0, 0);
+            return Math.abs(Math.round((a - b.getTime()) / 86400000));
+        }
+
+        function matchStatement(items, cardName) {
+            const recs = appData.transactions.filter(t => t.account === cardName && (t.type === 'expense' || t.type === 'income'));
+            const used = new Set();
+            const results = items.map((it, i) => ({ ...it, idx: i, match: null }));
+            const wantType = k => k === 'credit' ? 'income' : 'expense';
+            // 1) 金額相同、日期差 3 天內，取日期最接近的
+            results.filter(r => r.kind !== 'payment').forEach(r => {
+                let best = null, bestDiff = 99;
+                recs.forEach(t => {
+                    if (used.has(t.id) || t.type !== wantType(r.kind)) return;
+                    if (Math.abs(txToTWD(t) - r.amount) >= 0.5) return;
+                    const diff = stmtDayDiff(r.date, t.timestamp);
+                    if (diff <= 3 && diff < bestDiff) { best = t; bestDiff = diff; }
+                });
+                if (best) { used.add(best.id); r.match = best; }
+            });
+            // 帳單期間
+            const dates = items.filter(i => i.kind !== 'payment').map(i => i.date).sort();
+            let from = 0, to = 0;
+            if (dates.length) {
+                const [y1, m1, d1] = dates[0].split('-').map(Number), [y2, m2, d2] = dates[dates.length - 1].split('-').map(Number);
+                from = new Date(y1, m1 - 1, d1, 0, 0, 0).getTime();
+                to = new Date(y2, m2 - 1, d2, 23, 59, 59).getTime();
+            }
+            const DAY = 86400000;
+            const inRange = t => t.timestamp >= from - 3 * DAY && t.timestamp <= to + 3 * DAY;
+            const same = (a, b) => Math.abs(a - b) < 0.5;
+            // 2) 帳單兩筆 = 你記成一筆（例如 消費＋國外交易服務費、同一家店的兩筆）
+            //    至少一筆要在紀錄日期 3 天內；所有可能組合一起排序，最吻合的先配
+            const cands = [], maybeCands = [];
+            const openExp = results.filter(r => !r.match && r.kind === 'expense');
+            recs.filter(t => !used.has(t.id) && t.type === 'expense' && inRange(t)).forEach(t => {
+                for (let i = 0; i < openExp.length; i++) for (let j = i + 1; j < openExp.length; j++) {
+                    const a = openExp[i], b = openExp[j];
+                    if (!same(a.amount + b.amount, txToTWD(t))) continue;
+                    const diff = Math.min(stmtDayDiff(a.date, t.timestamp), stmtDayDiff(b.date, t.timestamp));
+                    if (diff > 3) {
+                        // 日期差比較遠但同一家店：不自動算已記過，只提示「可能是同一筆」
+                        if (a.merchant && a.merchant === b.merchant) maybeCands.push({ t, a, b, diff });
+                        continue;
+                    }
+                    const score = (STMT_FEE_RE.test(a.merchant) || STMT_FEE_RE.test(b.merchant) ? 2 : 0)
+                        + (a.merchant && a.merchant === b.merchant ? 2 : 0) + (a.date === b.date ? 1 : 0);
+                    cands.push({ t, a, b, score, diff });
+                }
+            });
+            cands.sort((x, y) => (y.score - x.score) || (x.diff - y.diff)).forEach(c => {
+                if (used.has(c.t.id) || c.a.match || c.b.match) return;
+                used.add(c.t.id);
+                [c.a, c.b].forEach(r => { r.match = c.t; r.combined = true; });
+            });
+            const maybeUsed = new Set();
+            maybeCands.sort((x, y) => x.diff - y.diff).forEach(c => {
+                if (used.has(c.t.id) || maybeUsed.has(c.t.id) || c.a.match || c.b.match || c.a.maybe || c.b.maybe) return;
+                maybeUsed.add(c.t.id);
+                c.a.maybe = c.b.maybe = c.t;
+            });
+            // 3) 帳單一筆 = 你拆成兩筆記（例如同一張發票分兩個分類）
+            results.filter(r => !r.match && r.kind === 'expense').forEach(r => {
+                const near = recs.filter(t => !used.has(t.id) && t.type === 'expense' && stmtDayDiff(r.date, t.timestamp) <= 3);
+                for (let i = 0; i < near.length; i++) for (let j = i + 1; j < near.length; j++) {
+                    if (r.match) return;
+                    if (same(txToTWD(near[i]) + txToTWD(near[j]), r.amount)) {
+                        used.add(near[i].id); used.add(near[j].id); r.match = near[i]; r.split = true;
+                    }
+                }
+            });
+            // 4) 帳單期間內有記、但帳單上沒有的
+            const extra = dates.length ? recs.filter(t => !used.has(t.id) && !maybeUsed.has(t.id) && t.type === 'expense' && t.timestamp >= from && t.timestamp <= to) : [];
+            return {
+                missing: results.filter(r => !r.match && r.kind !== 'payment'),
+                matched: results.filter(r => r.match),
+                skipped: results.filter(r => r.kind === 'payment'),
+                extra
+            };
+        }
+
+        function openStatementModal() {
+            const card = batchState.account;
+            if (!card || !checkIsCreditCard(card)) { showAlert('warning', '請先在上方選擇一張信用卡'); return; }
+            document.getElementById('stmt-card-name').textContent = card;
+            document.getElementById('stmt-format').value = 'auto';
+            document.getElementById('stmt-results').innerHTML = '';
+            document.getElementById('statement-modal').classList.remove('hidden');
+        }
+        function closeStatementModal() {
+            document.getElementById('statement-modal').classList.add('hidden');
+        }
+
+        function runStatementMatch() {
+            const card = batchState.account;
+            const text = document.getElementById('stmt-text').value;
+            let fmt = document.getElementById('stmt-format').value;
+            if (fmt === 'auto') fmt = stmtFormatFor(card);
+            let items = parseStatement(text, fmt);
+            if (!items.length) items = parseStatement(text, 'any');
+            const box = document.getElementById('stmt-results');
+            if (!items.length) {
+                box.innerHTML = '<div class="rounded-xl bg-amber-50 text-amber-900 text-sm p-3">沒有辨識到任何一筆。請確認貼上的是帳單明細文字，或在上方換一種「帳單格式」再試。</div>';
+                return;
+            }
+            stmtResult = matchStatement(items, card);
+            const { missing, matched, skipped, extra } = stmtResult;
+            const sum = items.filter(i => i.kind === 'expense').reduce((s, i) => s + i.amount, 0)
+                - items.filter(i => i.kind === 'credit').reduce((s, i) => s + i.amount, 0);
+            const row = (r, withBox) => `
+                <label class="flex items-center gap-2 py-2 border-t border-line first:border-0 ${withBox ? 'cursor-pointer' : ''}">
+                    ${withBox ? `<input type="checkbox" class="stmt-pick h-4 w-4 accent-[#9C7F66] shrink-0" data-idx="${r.idx}" ${r.maybe ? '' : 'checked'}>` : ''}
+                    <span class="text-xs text-gray-500 w-11 shrink-0 tabular-nums">${r.date.slice(5).replace('-', '/')}</span>
+                    <span class="text-sm text-primary min-w-0 flex-1 truncate">${escapeHtml(r.merchant || '（無商店名稱）')}${r.combined ? ' <span class="chip bg-secondary text-gray-500">記成一筆</span>' : ''}${r.split ? ' <span class="chip bg-secondary text-gray-500">分兩筆記</span>' : ''}${r.maybe ? `<span class="block text-[11px] text-blue-700">可能是 ${toLocalDateString(r.maybe.timestamp).slice(5).replace('-', '/')} 記的 ${formatCurrency(r.maybe.amount, r.maybe.currency)}（兩筆合計），已先不勾</span>` : ''}</span>
+                    <span class="text-sm font-bold tabular-nums shrink-0 ${r.kind === 'credit' ? 'text-green-700' : 'text-primary'}">${r.kind === 'credit' ? '+' : ''}${formatCurrency(r.amount, 'TWD')}</span>
+                </label>`;
+            box.innerHTML = `
+                <div class="grid grid-cols-3 gap-2 text-center mb-3">
+                    <div class="rounded-xl bg-amber-50 p-2"><p class="text-[11px] text-amber-800">沒記到</p><p class="font-bold text-amber-900">${missing.length}</p></div>
+                    <div class="rounded-xl bg-green-50 p-2"><p class="text-[11px] text-green-800">已記過</p><p class="font-bold text-green-900">${matched.length}</p></div>
+                    <div class="rounded-xl bg-secondary p-2"><p class="text-[11px] text-gray-500">帳單上沒有</p><p class="font-bold text-primary">${extra.length}</p></div>
+                </div>
+                <p class="text-[11px] text-gray-400 mb-3">辨識到 ${items.length} 筆，明細合計 NT$${formatCurrency(sum, 'TWD')}${skipped.length ? `（略過 ${skipped.length} 筆繳款）` : ''}</p>
+                ${missing.length ? `
+                    <div class="rounded-xl border border-amber-200 p-3 mb-3">
+                        <p class="text-sm font-bold text-amber-900 mb-1"><i class="fas fa-triangle-exclamation mr-1"></i>沒記到的</p>
+                        ${missing.map(r => row(r, true)).join('')}
+                        <button onclick="addStatementMissingToBatch()" class="btn-primary w-full !h-10 text-sm mt-2"><i class="fas fa-plus"></i>加入批次補帳</button>
+                    </div>` : '<div class="rounded-xl bg-green-50 text-green-800 text-sm font-bold text-center p-3 mb-3"><i class="fas fa-circle-check mr-1"></i>帳單上的每一筆都記過了！</div>'}
+                ${extra.length ? `
+                    <div class="rounded-xl border border-line p-3 mb-3">
+                        <p class="text-sm font-bold text-primary">有記、但帳單上沒有的</p>
+                        <p class="text-[11px] text-gray-500 mb-1">可能是金額記錯、記錯卡、交易沒完成（例如只收到驗證碼），或會出現在下一期帳單</p>
+                        ${extra.map(t => `
+                            <div class="flex items-center gap-2 py-2 border-t border-line first:border-0">
+                                <span class="text-xs text-gray-500 w-11 shrink-0 tabular-nums">${toLocalDateString(t.timestamp).slice(5).replace('-', '/')}</span>
+                                <span class="text-sm text-primary min-w-0 flex-1 truncate">${escapeHtml(t.name)}${t.note ? ' · ' + escapeHtml(t.note) : ''}</span>
+                                <span class="text-sm font-bold tabular-nums shrink-0">${formatCurrency(t.amount, t.currency)}</span>
+                                <button onclick="closeStatementModal(); openEditModal('${t.id}')" class="icon-btn !w-7 !h-7 shrink-0" title="修改"><i class="fas fa-pen text-[10px]"></i></button>
+                            </div>`).join('')}
+                    </div>` : ''}
+                ${matched.length ? `
+                    <details class="rounded-xl border border-line p-3">
+                        <summary class="text-sm font-bold text-primary cursor-pointer">已記過的 ${matched.length} 筆</summary>
+                        <div class="mt-1">${matched.map(r => row(r, false)).join('')}</div>
+                    </details>` : ''}`;
+        }
+
+        function addStatementMissingToBatch() {
+            if (!stmtResult) return;
+            const picked = new Set([...document.querySelectorAll('.stmt-pick:checked')].map(el => +el.dataset.idx));
+            const rows = stmtResult.missing.filter(r => picked.has(r.idx));
+            if (!rows.length) { showAlert('warning', '請勾選要補記的項目'); return; }
+            batchState.rows = batchState.rows.filter(r => !isBatchRowEmpty(r));
+            rows.forEach(r => {
+                const isCredit = r.kind === 'credit';
+                batchState.rows.push({
+                    ...newBatchRow(),
+                    date: r.date,
+                    type: isCredit ? 'income' : 'expense',
+                    cat: isCredit ? (/點|回饋|point/i.test(r.merchant) ? '回饋金' : '退刷') : '',
+                    sub: '',
+                    amount: String(r.amount),
+                    note: r.merchant
+                });
+            });
+            saveBatchDraft();
+            renderBatchRows();
+            closeStatementModal();
+            showAlert('success', `已加入 ${rows.length} 列，選好分類後按「儲存」`);
         }
 
         function saveStockPrices() {
@@ -3682,7 +4889,8 @@ function testRun() {
                         <span class="text-sm text-gray-600 shrink-0">帳單金額</span>
                         <input id="batch-bill-amount" type="number" inputmode="decimal" step="any" class="field-sm text-right font-bold tabular-nums" placeholder="輸入帳單上的本期金額" value="${escapeHtml(batchState.billAmounts[key] || '')}">
                     </label>
-                    <div id="rc-diff" class="mt-3 rounded-xl p-3 text-sm font-bold text-center"></div>`;
+                    <div id="rc-diff" class="mt-3 rounded-xl p-3 text-sm font-bold text-center"></div>
+                    <button onclick="openStatementModal()" class="w-full h-11 mt-2 rounded-xl border border-accent/40 bg-accent/5 text-accent text-sm font-bold hover:bg-accent/10"><i class="fas fa-paste mr-1.5"></i>貼上帳單明細，找出沒記到的</button>`;
                 document.getElementById('batch-month').onchange = function() {
                     batchState.month = this.value;
                     renderBatchReconcile();
@@ -4334,6 +5542,28 @@ function testRun() {
             }
         }
 
+        // ===== 生活收支統計規則 =====
+        // 還款／退款／退刷：別人還你錢或商家退錢 → 從支出扣除，不算收入
+        // 交易／投資（收入）與「投資」分類（支出）：股票買賣等資金移動 → 不計入
+        const STATS_OFFSET_INCOME = ['還款', '退款', '退刷'];
+        const STATS_EXCLUDED_INCOME = ['交易', '投資'];
+        const STATS_EXCLUDED_EXPENSE_CATS = ['投資'];
+
+        // 回傳 'income' | 'expense' | 'offset' | null（不計入）
+        function statsKind(t) {
+            if (t.account === '共同帳戶' || isAdjustmentTx(t)) return null;
+            if (t.type === 'income') {
+                if (STATS_OFFSET_INCOME.includes(t.name)) return 'offset';
+                if (STATS_EXCLUDED_INCOME.includes(t.name)) return null;
+                return 'income';
+            }
+            if (t.type === 'expense') {
+                const cat = (t.name || '').split('-')[0];
+                return STATS_EXCLUDED_EXPENSE_CATS.includes(cat) ? null : 'expense';
+            }
+            return null; // 轉帳、股票買賣
+        }
+
         function updateStatsLabels() {
             const D = getStatsDay();
             document.querySelectorAll('[data-stats-label]').forEach(el => {
@@ -4354,21 +5584,31 @@ function testRun() {
             rangeEl.textContent = `統計區間：${startDate.getMonth()+1}/${startDate.getDate()} ~ ${endDate.getMonth()+1}/${endDate.getDate()}`;
             const currentPeriodTransactions = appData.transactions.filter(t => {
                 const tDate = new Date(t.timestamp);
-                return tDate >= startDate && tDate <= endDate && t.type !== 'transfer' && t.account !== '共同帳戶' && !isAdjustmentTx(t);
+                return tDate >= startDate && tDate <= endDate;
             });
-            let totalExpenseTWD = 0, totalIncomeTWD = 0; const accountStats = {};
+            // totalExpenseTWD = 消費總額（各帳戶占比用）；offsetTWD = 還款／退款
+            let totalExpenseTWD = 0, totalIncomeTWD = 0, offsetTWD = 0; const accountStats = {};
             currentPeriodTransactions.forEach(t => {
+                const kind = statsKind(t);
                 const amountTWD = txToTWD(t);
-                if (t.type === 'expense') {
+                if (kind === 'expense') {
                     totalExpenseTWD += amountTWD;
                     if (!accountStats[t.account]) accountStats[t.account] = 0;
                     accountStats[t.account] += amountTWD;
-                } else if (t.type === 'income') {
+                } else if (kind === 'income') {
                     totalIncomeTWD += amountTWD;
+                } else if (kind === 'offset') {
+                    offsetTWD += amountTWD;
                 }
             });
-            totalExpenseEl.textContent = `TWD ${formatCurrency(totalExpenseTWD, 'TWD')}`;
+            const netExpenseTWD = totalExpenseTWD - offsetTWD;
+            totalExpenseEl.textContent = `TWD ${formatCurrency(netExpenseTWD, 'TWD')}`;
             totalIncomeEl.textContent = `TWD ${formatCurrency(totalIncomeTWD, 'TWD')}`;
+            const breakdownEl = document.getElementById('stats-expense-breakdown');
+            if (breakdownEl) {
+                breakdownEl.textContent = `消費 ${formatCurrency(totalExpenseTWD, 'TWD')} − 還款/退款 ${formatCurrency(offsetTWD, 'TWD')}`;
+                breakdownEl.classList.toggle('hidden', offsetTWD < 0.5);
+            }
             container.innerHTML = '';
             if (Object.keys(accountStats).length === 0) { container.innerHTML = '<p class="text-center text-gray-400 text-sm py-2">本週期尚無個人支出紀錄。</p>'; return; }
             const sortedStats = Object.entries(accountStats).sort((a, b) => b[1] - a[1]);
@@ -4399,12 +5639,14 @@ function testRun() {
         function getMonthlyStatsForYear(year) {
             const monthlyData = Array(12).fill(null).map(() => ({ income: 0, expense: 0 }));
             appData.transactions.forEach(t => {
-                if (t.type === 'transfer' || t.account === '共同帳戶' || isAdjustmentTx(t)) return;
+                const kind = statsKind(t);
+                if (!kind) return;
                 const { y, m } = getStatsPeriodOf(new Date(t.timestamp));
                 if (y === parseInt(year)) {
                     const amountTWD = txToTWD(t);
-                    if (t.type === 'income') monthlyData[m].income += amountTWD;
-                    else if (t.type === 'expense') monthlyData[m].expense += amountTWD;
+                    if (kind === 'income') monthlyData[m].income += amountTWD;
+                    else if (kind === 'expense') monthlyData[m].expense += amountTWD;
+                    else if (kind === 'offset') monthlyData[m].expense -= amountTWD;
                 }
             });
             return monthlyData;
@@ -4413,8 +5655,9 @@ function testRun() {
         function monthRowHtml(index, income, expense, dim) {
             const net = income - expense;
             const sum = income + expense;
-            const iw = sum > 0 ? (income / sum * 100) : 0;
-            const ew = sum > 0 ? (expense / sum * 100) : 0;
+            const barSum = Math.max(0, income) + Math.max(0, expense);
+            const iw = barSum > 0 ? (Math.max(0, income) / barSum * 100) : 0;
+            const ew = barSum > 0 ? (Math.max(0, expense) / barSum * 100) : 0;
             return `
                 <div class="flex items-center gap-3 text-sm ${dim ? 'opacity-40' : ''}">
                     <div class="w-9 font-bold text-gray-500 shrink-0">${index + 1}月</div>
@@ -4439,7 +5682,7 @@ function testRun() {
             container.innerHTML = '';
             let hasData = false;
             data.forEach((monthData, index) => {
-                const hasActivity = monthData.income > 0 || monthData.expense > 0;
+                const hasActivity = monthData.income !== 0 || monthData.expense !== 0;
                 if (hasActivity) hasData = true;
                 container.innerHTML += monthRowHtml(index, monthData.income, monthData.expense, !hasActivity);
             });
@@ -4465,7 +5708,7 @@ function testRun() {
             container.innerHTML = '';
             let hasData = false;
             data.forEach((monthData, index) => {
-                if (monthData.income > 0 || monthData.expense > 0) {
+                if (monthData.income !== 0 || monthData.expense !== 0) {
                     hasData = true;
                     container.innerHTML += monthRowHtml(index, monthData.income, monthData.expense, false);
                 }
@@ -4486,8 +5729,16 @@ function testRun() {
             const monthlyCategories = {};
             const yearlyCategories = {};
 
+            let monthlyOffset = 0, yearlyOffset = 0;
             appData.transactions.forEach(t => {
-                if (t.type !== 'expense' || t.account === '共同帳戶' || t.name.startsWith('投資') || isAdjustmentTx(t)) return;
+                const kind = statsKind(t);
+                if (kind === 'offset') {
+                    const od = new Date(t.timestamp);
+                    if (od >= mStart && od <= mEnd) monthlyOffset += txToTWD(t);
+                    if (getStatsPeriodOf(od).y === currentYear) yearlyOffset += txToTWD(t);
+                    return;
+                }
+                if (kind !== 'expense') return;
                 const tDate = new Date(t.timestamp);
                 const amountTWD = txToTWD(t);
                 if (tDate >= mStart && tDate <= mEnd) {
@@ -4527,6 +5778,16 @@ function testRun() {
                     }}}
                 }
             };
+
+            const setPieNote = (id, cats, offset) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const gross = Object.values(cats).reduce((a, b) => a + b, 0);
+                el.textContent = `消費合計 ${formatCurrency(gross, 'TWD')}，另有還款/退款 ${formatCurrency(offset, 'TWD')} 已從實際支出扣除（不分攤到分類）`;
+                el.classList.toggle('hidden', offset < 0.5);
+            };
+            setPieNote('monthly-pie-note', monthlyCategories, monthlyOffset);
+            setPieNote('yearly-pie-note', yearlyCategories, yearlyOffset);
 
             if (monthlyChartInstance) monthlyChartInstance.destroy();
             monthlyChartInstance = new Chart(ctxMonthly, { type: 'doughnut', data: generateChartData(monthlyCategories), options: commonOptions });
@@ -4857,6 +6118,9 @@ function testRun() {
             const order = [
                 ['confirm-modal', () => closeConfirm(false)],
                 ['stock-auto-modal', closeStockAutoModal],
+                ['inbox-review-modal', closeInboxReview],
+                ['statement-modal', closeStatementModal],
+                ['shortcut-guide-modal', closeShortcutGuide],
                 ['delete-stock-modal', closeDeleteStockModal],
                 ['delete-modal', closeDeleteModal],
                 ['adjust-balance-modal', closeAdjustBalanceModal],
@@ -4890,6 +6154,8 @@ function testRun() {
             renderRateStatus();
             if (!appData.ratesManual) fetchExchangeRates();
             autoRefreshStocksIfStale();
+            updateInboxBanners();
+            syncInbox(false);
 
             initKeepEntryPref();
             initBatch();
