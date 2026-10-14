@@ -218,6 +218,7 @@
                         <div class="h-1.5 rounded-full bg-white/15 overflow-hidden">
                             <div id="hero-goal-bar" class="h-full bg-white/80 rounded-full transition-all duration-500" style="width:0%"></div>
                         </div>
+                        <button onclick="goToTab('goal')" id="hero-goal-eta" class="hidden text-[11px] opacity-80 mt-1.5 text-left"></button>
                     </div>
                     <div id="exchange-rate-display" class="text-[11px] opacity-70 mt-3 pt-3 border-t border-white/10">匯率載入中…</div>
                 </div>
@@ -283,6 +284,16 @@
                         <span class="text-sm text-gray-600">收入扣除固定支出後</span>
                         <span id="plan-remaining" class="font-bold tabular-nums">--</span>
                     </div>
+                </div>
+
+                <!-- 每月自動記帳 -->
+                <div class="card p-4 mb-4">
+                    <div class="flex justify-between items-center gap-2 mb-1">
+                        <h3 class="section-title"><i class="fas fa-repeat text-accent"></i>每月自動記帳</h3>
+                        <button type="button" onclick="openRecurringModal()" class="h-8 px-3 rounded-lg bg-accent text-white text-xs font-bold shrink-0"><i class="fas fa-plus mr-1"></i>新增</button>
+                    </div>
+                    <p class="text-xs text-gray-400 mb-3">孝親費、訂閱、分期付款這類每月固定的收支，到了設定的日子會自動記一筆；分期可設定結束月份，到期自動停止。</p>
+                    <div id="recurring-list" class="space-y-2"></div>
                 </div>
 
                 <!-- 流動支出 -->
@@ -533,6 +544,23 @@
                         <div id="monthly-stats-list" class="space-y-3"></div>
                     </div>
 
+                    <div class="card p-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="section-title"><i class="fas fa-bullseye text-accent"></i>本月分類預算</h3>
+                            <button onclick="openBudgetModal()" class="chip !h-7 !px-3 bg-accent/10 text-accent hover:bg-accent/20"><i class="fas fa-pen text-[9px]"></i>設定</button>
+                        </div>
+                        <div id="budget-list" class="space-y-3"></div>
+                    </div>
+
+                    <div class="card p-4">
+                        <h3 class="section-title mb-3"><i class="fas fa-code-compare text-accent"></i>跟上個月比</h3>
+                        <div id="compare-seg" class="seg mb-3">
+                            <button type="button" class="seg-btn !text-xs is-active" data-mode="mtd" onclick="setCompareMode('mtd')">本月至今 vs 上月同期</button>
+                            <button type="button" class="seg-btn !text-xs" data-mode="full" onclick="setCompareMode('full')">上月 vs 前月</button>
+                        </div>
+                        <div id="compare-body"></div>
+                    </div>
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="card p-4">
                             <h4 class="section-title">本月消費分析</h4>
@@ -596,6 +624,23 @@
                         <p id="goal-percent-display" class="text-right text-sm mt-1.5 text-gray-600 font-bold tabular-nums">0%</p>
                     </div>
                     <div id="goal-status" class="border-t border-line mt-4 pt-2"></div>
+                </div>
+
+                <div class="card p-4 mt-4">
+                    <h3 class="section-title mb-1"><i class="fas fa-flag-checkered text-accent"></i>什麼時候會達標？</h3>
+                    <div id="goal-forecast"></div>
+                </div>
+
+                <div class="card p-4 mt-4">
+                    <div class="flex justify-between items-center gap-2 mb-1">
+                        <h3 class="section-title"><i class="fas fa-chart-line text-accent"></i>淨資產走勢</h3>
+                        <select id="nw-range" class="field-sm max-w-[120px]" onchange="renderNetWorthTrend()">
+                            <option value="12">近 12 個月</option>
+                            <option value="24">近 24 個月</option>
+                        </select>
+                    </div>
+                    <p id="nw-note" class="text-[11px] text-gray-400 mb-2"></p>
+                    <div class="relative w-full" style="height: 240px;"><canvas id="nw-chart"></canvas></div>
                 </div>
             </section>
         </div>
@@ -770,6 +815,96 @@
                     <input type="file" id="import-file" accept=".json" class="hidden" onchange="handleFileImport(this)">
                     <p class="text-xs text-gray-400 text-center">匯入會覆蓋目前所有資料</p>
                 </div>
+                <div class="mt-5 pt-4 border-t border-line">
+                    <h4 class="font-bold text-sm text-primary flex items-center gap-2 mb-2"><i class="fas fa-cloud-arrow-up text-accent"></i>Google 雲端硬碟自動備份</h4>
+                    <div id="cloud-backup-body" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 每月自動記帳 Modal -->
+    <div id="recurring-modal" class="modal fixed inset-0 z-[60] flex items-end sm:items-center justify-center hidden">
+        <div class="modal-backdrop absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeRecurringModal()"></div>
+        <div class="modal-panel sm:max-w-md">
+            <div class="modal-head">
+                <h3 class="text-lg font-bold text-primary flex items-center gap-2"><i class="fas fa-repeat text-accent"></i><span id="recurring-modal-title">新增每月自動記帳</span></h3>
+                <button class="icon-btn" onclick="closeRecurringModal()" aria-label="關閉"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="px-5 pb-6 pb-safe space-y-3" oninput="rcPreview()" onchange="rcPreview()">
+                <input type="hidden" id="rc-id">
+                <label class="block">
+                    <span class="text-xs text-gray-500">名稱</span>
+                    <input type="text" id="rc-label" class="field-sm" placeholder="例如：孝親費、iPhone 分期" maxlength="40">
+                </label>
+                <div id="rc-type-seg" class="seg">
+                    <button type="button" class="seg-btn type-seg-btn is-active" data-type="expense" onclick="rcSetType('expense')">支出</button>
+                    <button type="button" class="seg-btn type-seg-btn" data-type="income" onclick="rcSetType('income')">收入</button>
+                    <button type="button" class="seg-btn type-seg-btn" data-type="transfer" onclick="rcSetType('transfer')">轉帳</button>
+                </div>
+                <div id="rc-cat-wrap" class="grid grid-cols-2 gap-2">
+                    <select id="rc-cat" class="field-sm" onchange="if (rcType === 'expense') rcFillSub()"></select>
+                    <select id="rc-sub" class="field-sm"></select>
+                </div>
+                <label class="block">
+                    <span id="rc-account-label" class="text-xs text-gray-500">付款方式</span>
+                    <select id="rc-account" class="field-sm"></select>
+                </label>
+                <label id="rc-to-wrap" class="block hidden">
+                    <span class="text-xs text-gray-500">轉入帳戶</span>
+                    <select id="rc-to" class="field-sm"></select>
+                </label>
+                <div class="grid grid-cols-[1fr_88px] gap-2">
+                    <label class="block">
+                        <span class="text-xs text-gray-500">每月金額</span>
+                        <input type="number" inputmode="decimal" step="any" min="0" id="rc-amount" class="field-sm text-right font-bold tabular-nums" placeholder="0">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs text-gray-500">幣別</span>
+                        <select id="rc-currency" class="field-sm"><option value="TWD">TWD</option><option value="USD">USD</option><option value="CNY">CNY</option></select>
+                    </label>
+                </div>
+                <label class="block">
+                    <span class="text-xs text-gray-500">每月幾號記帳</span>
+                    <select id="rc-day" class="field-sm"></select>
+                </label>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="block min-w-0">
+                        <span class="text-xs text-gray-500">開始月份</span>
+                        <input type="month" id="rc-start" class="field-sm">
+                    </label>
+                    <label class="block min-w-0">
+                        <span class="text-xs text-gray-500">結束月份（選填）</span>
+                        <input type="month" id="rc-end" class="field-sm">
+                    </label>
+                </div>
+                <p class="text-[11px] text-gray-400 -mt-1">分期付款填最後一期的月份，到期自動停止；不填就是一直持續。</p>
+                <label class="block">
+                    <span class="text-xs text-gray-500">備註（選填）</span>
+                    <input type="text" id="rc-note" class="field-sm" maxlength="60">
+                </label>
+                <p id="rc-preview" class="text-xs rounded-lg bg-secondary px-3 py-2 text-gray-600"></p>
+                <button type="button" onclick="saveRecurringRule()" class="btn-primary w-full"><i class="fas fa-floppy-disk"></i>儲存</button>
+                <div id="rc-actions" class="hidden grid grid-cols-2 gap-2">
+                    <button type="button" id="rc-pause-btn" onclick="toggleRecurringPause()" class="btn-ghost !h-10 text-sm"><i class="fas fa-pause"></i>暫停</button>
+                    <button type="button" onclick="deleteRecurringRule()" class="h-10 rounded-xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100"><i class="fas fa-trash-alt mr-1"></i>刪除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分類預算 Modal -->
+    <div id="budget-modal" class="modal fixed inset-0 z-[60] flex items-end sm:items-center justify-center hidden">
+        <div class="modal-backdrop absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeBudgetModal()"></div>
+        <div class="modal-panel sm:max-w-md">
+            <div class="modal-head">
+                <h3 class="text-lg font-bold text-primary flex items-center gap-2"><i class="fas fa-bullseye text-accent"></i>每月分類預算</h3>
+                <button class="icon-btn" onclick="closeBudgetModal()" aria-label="關閉"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="px-5 pb-6 pb-safe">
+                <p class="text-xs text-gray-500 mb-2">只要填想控制的分類，空白就是不設定。可以參考右邊的近 3 個月平均來訂。</p>
+                <div id="budget-edit-list" class="mb-4"></div>
+                <button type="button" onclick="saveBudgets()" class="btn-primary w-full"><i class="fas fa-floppy-disk"></i>儲存預算</button>
             </div>
         </div>
     </div>
@@ -842,18 +977,26 @@
                 </div>
 
                 <div id="settings-categories-tab" class="settings-tab-content hidden space-y-5">
-                    <p class="text-sm text-gray-500">新增或刪除記帳分類。刪除分類不會影響已經記錄的資料。</p>
+                    <p class="text-sm text-gray-500">新增、刪除或排序記帳分類。刪除分類不會影響已經記錄的資料。</p>
                     <div>
-                        <h4 class="font-bold text-sm text-primary mb-2">支出分類</h4>
-                        <div class="flex gap-2 mb-3">
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <h4 class="font-bold text-sm text-primary">支出分類</h4>
+                            <button type="button" id="sort-exp-btn" onclick="toggleCatSort('exp')" class="chip !h-8 !px-3 !text-xs bg-secondary text-primary hover:bg-line"><i class="fas fa-sort text-[10px]"></i>排序</button>
+                        </div>
+                        <p id="sort-exp-hint" class="hidden text-xs text-accent mb-2">用箭頭調整順序（細項用左右箭頭），記帳和快速記帳的選單都會照這個順序。調好按「完成」。</p>
+                        <div id="new-expense-row" class="flex gap-2 mb-3">
                             <input type="text" id="new-expense-category" placeholder="新增支出分類，例如：教育" class="field-sm">
                             <button type="button" onclick="addExpenseCategory()" class="h-9 px-4 rounded-lg bg-accent text-white text-sm font-bold shrink-0 hover:bg-accent/90">新增</button>
                         </div>
                         <div id="settings-expense-categories" class="space-y-2"></div>
                     </div>
                     <div>
-                        <h4 class="font-bold text-sm text-primary mb-2">收入分類</h4>
-                        <div class="flex gap-2 mb-3">
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <h4 class="font-bold text-sm text-primary">收入分類</h4>
+                            <button type="button" id="sort-inc-btn" onclick="toggleCatSort('inc')" class="chip !h-8 !px-3 !text-xs bg-secondary text-primary hover:bg-line"><i class="fas fa-sort text-[10px]"></i>排序</button>
+                        </div>
+                        <p id="sort-inc-hint" class="hidden text-xs text-accent mb-2">用箭頭調整順序，調好按「完成」。</p>
+                        <div id="new-income-row" class="flex gap-2 mb-3">
                             <input type="text" id="new-income-category" placeholder="新增收入分類，例如：兼職" class="field-sm">
                             <button type="button" onclick="addIncomeCategory()" class="h-9 px-4 rounded-lg bg-accent text-white text-sm font-bold shrink-0 hover:bg-accent/90">新增</button>
                         </div>
@@ -960,16 +1103,22 @@
         </div>
     </div>
     <script type="text/plain" id="gas-source">/**
- * Winds 資產分配計畫 — Google 小程式（Google Apps Script）　版本 4
+ * Winds 資產分配計畫 — Google 小程式（Google Apps Script）　版本 5
  *
  * 用途：
  *   1. 股價查詢：記帳工具把持有的股票代號傳過來，這支程式查好股價後回傳。
  *      只會收到「股票代號」，不會收到你的持股數量或金額。
  *   2. 捷徑記帳收件匣：iPhone 捷徑（桌面快速記帳、Apple Pay、簡訊）把記帳送到這裡暫存，
  *      記帳工具打開時再收回去。需要密鑰才能存取，記帳工具會自動設定。
+ *   3. 雲端備份：記帳工具每天把資料備份到你自己的 Google 雲端硬碟「Winds記帳備份」資料夾，
+ *      保留最近 60 天，換手機時可以一鍵還原。需要密鑰才能存取。
+ *   4. 歷史股價：資產走勢圖用的每月收盤價（只收到股票代號）。
  *
- * 從版本 1 更新：貼上新程式碼並儲存 →「部署」→「管理部署作業」→ 鉛筆圖示 →
- *   版本選「新版本」→「部署」。網址不會改變。
+ * 從舊版更新：
+ *   1. 全選刪掉舊程式碼，貼上這份 → 儲存
+ *   2. 上方函式選單選「setupBackup」→ 按「執行」→ 依畫面允許存取 Google 雲端硬碟
+ *      （出現「Google 尚未驗證這個應用程式」時，按「進階」→「前往…（不安全）」→「允許」）
+ *   3.「部署」→「管理部署作業」→ 鉛筆圖示 → 版本選「新版本」→「部署」。網址不會改變。
  *
  * 安裝方式（只需做一次）：
  *   1. 開一個新的 Google 試算表（網址列輸入 sheets.new）
@@ -992,7 +1141,10 @@ var WAIT_MS = 1200;
 
 var INBOX_SHEET = '_inbox';          // 捷徑記帳暫存區
 var INBOX_COLS = ['id', 'createdAt', 'date', 'type', 'amount', 'currency', 'name', 'account', 'cardHint', 'merchant', 'note', 'source', 'status', 'cid'];
-var VERSION = 4;
+var VERSION = 5;
+
+var BACKUP_FOLDER = 'Winds記帳備份';  // 雲端硬碟裡的備份資料夾名稱
+var BACKUP_KEEP = 60;                 // 保留最近幾天的備份
 
 function doGet(e) {
   return route_(collectParams_(e));
@@ -1020,8 +1172,9 @@ function route_(p) {
   var action = String(p.action || '').toLowerCase();
   try {
     if (!action || action === 'prices') return handlePrices_(p);
-    if (action === 'ping') return json_({ ok: true, version: VERSION, inbox: true, hasKey: !!getKey_() });
+    if (action === 'ping') return json_({ ok: true, version: VERSION, inbox: true, backup: true, hasKey: !!getKey_() });
     if (action === 'setkey') return handleSetKey_(p);
+    if (action === 'history') return handleHistory_(p);
     if (!checkKey_(p.key)) return json_({ ok: false, error: '密鑰不正確', code: 'bad_key', version: VERSION });
     if (action === 'add') return handleAdd_(p);
     if (action === 'sms') return handleSms_(p);
@@ -1030,6 +1183,9 @@ function route_(p) {
     if (action === 'menu') return handleMenu_();
     if (action === 'inbox') return handleInbox_();
     if (action === 'ack') return handleAck_(p);
+    if (action === 'backup') return handleBackup_(p);
+    if (action === 'backups') return handleBackupList_();
+    if (action === 'restore') return handleRestore_(p);
     return json_({ ok: false, error: '未知的動作：' + action, version: VERSION });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message || err), version: VERSION });
@@ -1167,22 +1323,22 @@ function readInbox_() {
 // ---------------- 刷卡簡訊解析 ----------------
 // 每家銀行一條規則；解析不到就回傳 null（捷徑會安靜結束，不跳任何東西）
 var SMS_RULES = [
-  { // 小心詐騙！星展卡末碼 4036 網路交易於 VIESHOW CINEMA  新臺幣 TWD 596.00，驗證碼 234514
+  { // 小心詐騙！星展卡末碼 1234 網路交易於 VIESHOW CINEMA  新臺幣 TWD 596.00，驗證碼 234514
     bank: '星展', re: /星展卡末碼\s*(\d{4})[\s\S]*?交易於\s*([\s\S]*?)\s*新[臺台]幣\s*(?:TWD)?\s*\$?\s*([\d,]+(?:\.\d+)?)/,
     pick: function (m) { return { last4: m[1], merchant: m[2], amount: m[3] }; } },
-  { // 防詐騙!台新卡末碼4209點選網頁識別碼HWTZ，交易金額【新臺幣2342.00元】，驗證碼[967976]
+  { // 防詐騙!台新卡末碼5678點選網頁識別碼HWTZ，交易金額【新臺幣2342.00元】，驗證碼[967976]
     bank: '台新', re: /台新卡末碼\s*(\d{4})[\s\S]*?新[臺台]幣\s*([\d,]+(?:\.\d+)?)\s*元/,
     pick: function (m) { return { last4: m[1], amount: m[2] }; } },
-  { // 國泰世華卡號後四碼8514於2026/09/2904:25MICROSOFT#G187270150NT$964元。因疑有異常消費…
+  { // 國泰世華卡號後四碼9012於2026/09/2904:25MICROSOFT#G187270150NT$964元。因疑有異常消費…
     bank: '國泰', re: /國泰世華卡號後四碼\s*(\d{4})\s*於\s*(\d{4})\/(\d{2})\/(\d{2})\s*\d{2}:\d{2}\s*([\s\S]*?)\s*NT\$\s*([\d,]+(?:\.\d+)?)\s*元/,
     pick: function (m) { return { last4: m[1], date: m[2] + '-' + m[3] + '-' + m[4], merchant: m[5], amount: m[6] }; } },
-  { // 國泰世華卡末碼8514網路交易新臺幣TWD$1,509元，點選核對網頁識別碼…
+  { // 國泰世華卡末碼9012網路交易新臺幣TWD$1,509元，點選核對網頁識別碼…
     bank: '國泰', re: /國泰世華卡末碼\s*(\d{4})[\s\S]*?(?:新[臺台]幣)?\s*TWD\s*\$?\s*([\d,]+(?:\.\d+)?)\s*元/,
     pick: function (m) { return { last4: m[1], amount: m[2] }; } },
   { // 提防詐騙！勿輕易提供密碼，您玉山卡網路消費 新台幣 TWD 1120 元，網頁識別碼…
     bank: '玉山', re: /玉山卡(?:末[四]?碼\s*(\d{4}))?[\s\S]*?(?:消費|交易)\s*新[臺台]幣\s*(?:TWD)?\s*\$?\s*([\d,]+(?:\.\d+)?)\s*元/,
     pick: function (m) { return { last4: m[1] || '', amount: m[2] }; } },
-  { // 【富邦华一银行】您尾号8983的卡片于2026-08-10 09:32，通过抖音支付-某某店快捷支付支付转账263.00元
+  { // 【富邦华一银行】您尾号3456的卡片于2026-08-10 09:32，通过抖音支付-某某店快捷支付支付转账263.00元
     bank: '富邦華一', currency: 'CNY',
     re: /富邦华一银行[\s\S]*?尾号\s*(\d{4})[\s\S]*?于\s*(\d{4})-(\d{2})-(\d{2})\s*\d{2}:\d{2}[，,]\s*通过([\s\S]*?)(退款|支付转账|转账|消费|支付)\s*([\d,]+(?:\.\d+)?)\s*元/,
     pick: function (m) {
@@ -1310,6 +1466,173 @@ function handleMenu_() {
   return json_({ ok: true, menu: menu, version: VERSION });
 }
 
+// ---------------- 雲端備份 ----------------
+function backupFolder_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('BACKUP_FOLDER_ID');
+  if (id) {
+    try {
+      var f = DriveApp.getFolderById(id);
+      if (!f.isTrashed()) return f;
+    } catch (e) { /* 資料夾被刪掉就重建 */ }
+  }
+  var it = DriveApp.getFoldersByName(BACKUP_FOLDER);
+  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER);
+  props.setProperty('BACKUP_FOLDER_ID', folder.getId());
+  return folder;
+}
+
+function backupError_(err) {
+  var msg = String(err && err.message || err);
+  var needAuth = /permission|authoriz|授權|權限|DriveApp/i.test(msg);
+  return json_({ ok: false, error: needAuth ? '需要授權 Google 雲端硬碟' : msg, code: needAuth ? 'need_auth' : 'error', version: VERSION });
+}
+
+var BACKUP_NAME_RE = /^backup_\d{4}-\d{2}-\d{2}\.json$/;
+
+/** 一天一個檔案（同一天重複備份會覆蓋），超過 BACKUP_KEEP 天的舊檔移到垃圾桶 */
+function handleBackup_(p) {
+  var data = typeof p.data === 'string' ? p.data : JSON.stringify(p.data || null);
+  var obj = null;
+  try { obj = JSON.parse(data); } catch (e) {}
+  if (!obj || !Array.isArray(obj.transactions)) return json_({ ok: false, error: '備份內容不正確', version: VERSION });
+  if (data.length > 30 * 1024 * 1024) return json_({ ok: false, error: '資料太大', version: VERSION });
+  var name = 'backup_' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd') + '.json';
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var folder = backupFolder_();
+    var same = folder.getFilesByName(name);
+    if (same.hasNext()) same.next().setContent(data);
+    else folder.createFile(name, data, 'application/json');
+    var all = [];
+    var it = folder.getFiles();
+    while (it.hasNext()) {
+      var f = it.next();
+      if (BACKUP_NAME_RE.test(f.getName())) all.push(f);
+    }
+    all.sort(function (a, b) { return a.getName() < b.getName() ? 1 : -1; });
+    all.slice(BACKUP_KEEP).forEach(function (f) { f.setTrashed(true); });
+    return json_({ ok: true, name: name, size: data.length, count: obj.transactions.length, time: Date.now(), version: VERSION });
+  } catch (err) {
+    return backupError_(err);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleBackupList_() {
+  try {
+    var folder = backupFolder_();
+    var list = [];
+    var it = folder.getFiles();
+    while (it.hasNext()) {
+      var f = it.next();
+      if (!BACKUP_NAME_RE.test(f.getName())) continue;
+      list.push({ id: f.getId(), name: f.getName(), date: f.getName().slice(7, 17), size: f.getSize(), updated: f.getLastUpdated().getTime() });
+    }
+    list.sort(function (a, b) { return a.name < b.name ? 1 : -1; });
+    return json_({ ok: true, items: list.slice(0, BACKUP_KEEP), folderUrl: folder.getUrl(), version: VERSION });
+  } catch (err) {
+    return backupError_(err);
+  }
+}
+
+/** 只允許讀取備份資料夾裡的備份檔 */
+function handleRestore_(p) {
+  try {
+    var id = String(p.id || '');
+    if (!/^[A-Za-z0-9_\-]{10,100}$/.test(id)) return json_({ ok: false, error: '缺少備份編號', version: VERSION });
+    var folderId = backupFolder_().getId();
+    var file = DriveApp.getFileById(id);
+    var inFolder = false;
+    var parents = file.getParents();
+    while (parents.hasNext()) { if (parents.next().getId() === folderId) inFolder = true; }
+    if (!inFolder || !BACKUP_NAME_RE.test(file.getName())) return json_({ ok: false, error: '找不到這個備份', version: VERSION });
+    return json_({ ok: true, name: file.getName(), data: file.getBlob().getDataAsString('UTF-8'), version: VERSION });
+  } catch (err) {
+    return backupError_(err);
+  }
+}
+
+/** 第一次使用雲端備份前，在編輯器選這個函式按「執行」，完成雲端硬碟授權 */
+function setupBackup() {
+  var folder = backupFolder_();
+  Logger.log('備份資料夾已準備好：' + folder.getUrl());
+}
+
+// ---------------- 歷史股價（資產走勢圖用） ----------------
+// 回傳每個月最後的收盤價：{ 'TW:2330': { '2025-11': 1450, ... }, 'FX:USD': {...} }
+function handleHistory_(p) {
+  var items = parseCodes_(p.codes || '');
+  var fx = String(p.fx || '').split(',').map(function (s) { return s.trim().toUpperCase(); })
+    .filter(function (c) { return /^[A-Z]{3}$/.test(c) && c !== 'TWD'; }).slice(0, 5);
+  var range = /^(1y|2y|5y)$/.test(String(p.range || '')) ? String(p.range) : '2y';
+  var reqs = items.map(function (it) {
+    return { key: it.key, syms: it.market === 'TW' ? [it.code + '.TW', it.code + '.TWO'] : [it.code] };
+  });
+  fx.forEach(function (c) { reqs.push({ key: 'FX:' + c, syms: [c + 'TWD=X'] }); });
+
+  var cache = CacheService.getScriptCache();
+  var out = {};
+  var pending = [];
+  reqs.forEach(function (r) {
+    var c = cache.get('h_' + range + '_' + r.key);
+    if (c) { try { out[r.key] = JSON.parse(c); return; } catch (e) {} }
+    pending.push(r);
+  });
+  for (var attempt = 0; attempt < 2 && pending.length; attempt++) {
+    var batch = pending.filter(function (r) { return r.syms[attempt]; });
+    if (!batch.length) break;
+    var resps = [];
+    try {
+      resps = UrlFetchApp.fetchAll(batch.map(function (r) {
+        return {
+          url: 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(r.syms[attempt]) + '?range=' + range + '&interval=1mo',
+          muteHttpExceptions: true,
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        };
+      }));
+    } catch (e) { resps = []; }
+    var still = [];
+    batch.forEach(function (r, i) {
+      var m = resps[i] ? parseYahooMonthly_(resps[i]) : null;
+      if (m) {
+        out[r.key] = m;
+        try { cache.put('h_' + range + '_' + r.key, JSON.stringify(m), 21600); } catch (e) {}
+      } else {
+        still.push(r);
+      }
+    });
+    pending = still;
+  }
+  var missing = reqs.filter(function (r) { return !out[r.key]; }).map(function (r) { return r.key; });
+  return json_({ ok: true, history: out, missing: missing, time: Date.now(), version: VERSION });
+}
+
+function parseYahooMonthly_(res) {
+  try {
+    if (res.getResponseCode() !== 200) return null;
+    var j = JSON.parse(res.getContentText());
+    var r = j && j.chart && j.chart.result && j.chart.result[0];
+    if (!r || !r.timestamp) return null;
+    var q = r.indicators && r.indicators.quote && r.indicators.quote[0];
+    var closes = q && q.close;
+    if (!closes) return null;
+    var off = (r.meta && r.meta.gmtoffset) || 0;
+    var m = {};
+    r.timestamp.forEach(function (ts, i) {
+      var c = closes[i];
+      if (typeof c !== 'number' || !(c > 0)) return;
+      var d = new Date((ts + off) * 1000);
+      m[d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2)] = Math.round(c * 10000) / 10000;
+    });
+    return Object.keys(m).length ? m : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 /** 要更換密鑰時，在編輯器選這個函式按「執行」，再到記帳工具重新設定 */
 function resetInboxKey() {
   PropertiesService.getScriptProperties().deleteProperty('INBOX_KEY');
@@ -1418,7 +1741,7 @@ function json_(obj) {
 /** 在編輯器裡按「執行」這個函式，可以先測試是否能抓到股價 */
 /** 測試簡訊解析：在編輯器選這個函式按「執行」，到「執行紀錄」看結果 */
 function testSms() {
-  Logger.log(JSON.stringify(parseSms_('小心詐騙！星展卡末碼 4036 網路交易於 VIESHOW CINEMA  新臺幣 TWD 596.00，驗證碼 234514')));
+  Logger.log(JSON.stringify(parseSms_('小心詐騙！星展卡末碼 1234 網路交易於 VIESHOW CINEMA  新臺幣 TWD 596.00，驗證碼 234514')));
 }
 
 function testRun() {
@@ -1644,13 +1967,8 @@ function testRun() {
             "國泰證券(台股)": "國泰cube帳戶"
         };
 
-        const CREDIT_CARDS_INITIAL = [
-            { id: 'c1', name: "台新richart卡(玫瑰卡&gogo卡)", currency: "TWD", linkedAccount: "台新RICHART帳戶", billingDay: 7, paymentDay: 21 },
-            { id: 'c2', name: "玉山卡(ubear&unicard)", currency: "TWD", linkedAccount: "玉山數位帳戶", billingDay: 5, paymentDay: 20 },
-            { id: 'c4', name: "國泰cube卡", currency: "TWD", linkedAccount: "國泰cube帳戶", billingDay: 5, paymentDay: 20 },
-            { id: 'c5', name: "星展現金回饋卡", currency: "TWD", linkedAccount: "台新薪轉帳戶", billingDay: 7, paymentDay: 25 },
-            { id: 'c6', name: "聯邦吉鶴卡", currency: "TWD", linkedAccount: "聯邦newnewbank帳戶", billingDay: 3, paymentDay: 18 }
-        ];
+        // 第一次使用（或清除資料後）才會用到的預設值；實際資料存在瀏覽器裡，不寫在程式碼中
+        const CREDIT_CARDS_INITIAL = [];
 
         // 信用卡合併規則：讀取資料（含匯入舊備份）時，自動把 from 裡的卡片合併成 to
         const CARD_MERGE_RULES = [
@@ -1721,18 +2039,18 @@ function testRun() {
 
         const DEFAULT_EXPENSE_CATEGORIES = {
             "飲食": ["早餐", "午餐", "晚餐", "點心", "零食", "飲料", "其他"],
-            "交通": ["加油費", "停車費", "計程車", "高鐵票", "火車票", "捷運票", "CAT-8625 支出", "MEL-7075 支出", "其他"],
+            "交通": ["加油費", "停車費", "計程車", "高鐵票", "火車票", "捷運票", "其他"],
             "娛樂": ["電影", "門票", "訂閱", "遊戲", "出遊旅費", "其他"],
-            "購物": ["衣服", "配件", "美妝", "家電", "禮物", "巧郎運費", "日用品", "其他"],
+            "購物": ["衣服", "配件", "美妝", "家電", "禮物", "日用品", "其他"],
             "個人": ["電話費", "捐款", "寵物", "保險", "其他"],
             "醫療": ["門診", "藥品", "醫療用品", "打針", "健康檢查", "其他"],
-            "美容美髮": ["用頭髮", "按摩", "其他"],
+            "美容美髮": ["剪頭髮", "按摩", "其他"],
             "家庭": ["孝親費", "懷孕相關", "小孩相關", "其他"],
             "投資": ["股票交割", "基金扣款", "其他"]
         };
 
         const DEFAULT_INCOME_CATEGORIES = [
-            "薪水", "獎金", "韵禾苑", "還款", "股利", "交易", "利息", "退款", "隊友貢獻", "退刷", "回饋金", "投資", "其他"
+            "薪水", "獎金", "還款", "股利", "交易", "利息", "退款", "隊友貢獻", "退刷", "回饋金", "投資", "其他"
         ];
 
         // 目前使用中的分類（從 appData 載入，可在「設定 > 分類管理」編輯）
@@ -1740,49 +2058,18 @@ function testRun() {
         let INCOME_CATEGORIES_LIST = [...DEFAULT_INCOME_CATEGORIES];
 
         const STATIC_ASSETS = [
-            { id: 'asset-1', name: "現金", amount: 514, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-2', name: "IPASSMONEY", amount: 2231, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-3', name: "永豐大戶銀行帳戶", amount: 239, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-4', name: "台新RICHART(天然石帳戶)", amount: 11186, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-5', name: "中國信託(天然石帳戶)", amount: 24593, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-6', name: "國泰外幣帳戶", amount: 5.16, currency: "USD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-7', name: "富邦華一銀行帳戶", amount: 293.4, currency: "CNY", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-8', name: "台新RICHART帳戶", amount: 1190, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-9', name: "台新薪轉帳戶", amount: 127388, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-12', name: "玉山數位帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-13', name: "國泰cube帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-14', name: "星展銀行帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-15', name: "聯邦newnewbank帳戶", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" },
-            { id: 'asset-10', name: "永豐大戶投(台股)", amount: 0, currency: "TWD", type: "investment", category: "證券戶" },
-            { id: 'asset-11', name: "國泰證券(美股)", amount: 0, currency: "USD", type: "investment", category: "證券戶" },
-            { id: 'asset-16', name: "國泰證券(台股)", amount: 0, currency: "TWD", type: "investment", category: "證券戶" },
+            { id: 'asset-1', name: "現金", amount: 0, currency: "TWD", type: "cash", category: "現金與帳戶" }
         ];
 
-        const INITIAL_STOCKS = [
-            { id: 's1', code: '006208', name: '富邦台50', shares: 1850, cost: 90.97, currency: 'TWD', account: '永豐大戶投(台股)', currentPrice: 110.0 },
-            { id: 's2', code: '00878', name: '國泰永續高股息', shares: 4000, cost: 18.77, currency: 'TWD', account: '永豐大戶投(台股)', currentPrice: 22.5 },
-            { id: 's3', code: '2330', name: '台積電', shares: 70, cost: 1017.29, currency: 'TWD', account: '永豐大戶投(台股)', currentPrice: 1050.0 },
-            { id: 's4', code: '2474', name: '可成', shares: 200, cost: 208.00, currency: 'TWD', account: '永豐大戶投(台股)', currentPrice: 210.0 },
-            { id: 's5', code: 'QQQ', name: 'Invesco QQQ', shares: 2.21135, cost: 543.11, currency: 'USD', account: '國泰證券(美股)', currentPrice: 550.0 },
-            { id: 's6', code: 'VTI', name: 'Vanguard Total Stock', shares: 3.95795, cost: 303.44, currency: 'USD', account: '國泰證券(美股)', currentPrice: 310.0 }
-        ];
+        const INITIAL_STOCKS = [];
 
         const JOINT_ACCOUNT_INITIAL = { id: 'joint-0', name: "共同帳戶", amount: 0, currency: "TWD", type: "joint", category: "共同帳戶" };
 
-        const FIXED_EXPENSES_DEFAULT = [
-            { name: "Iphone17分期(至115年9月)", amount: 2491, currency: "TWD"},
-            { name: "公益捐款", amount: 300, currency: "TWD"},
-            { name: "孝親費", amount: 8000, currency: "TWD"},
-            { name: "訂閱", amount: 610, currency: "TWD"},
-            { name: "手機費", amount: 799, currency: "TWD"},
-            { name: "定期定額美股(國泰證券)", amount: 240.2, currency: "USD"},
-            { name: "共同帳戶存入款項", amount: 10000, currency: "TWD"},
-        ];
+        const FIXED_EXPENSES_DEFAULT = [];
 
         // trackCards: 此預算會扣除本期所有信用卡刷卡金額（原「零用金」的邏輯）
         const FLUID_EXPENSES_DEFAULT = [
-            { name: "零用金", amount: 10000, currency: "TWD", trackCards: true },
-            { name: "備用金額", amount: 10000, currency: "TWD", trackCards: false },
+            { name: "零用金", amount: 0, currency: "TWD", trackCards: true },
         ];
         let FLUID_EXPENSES = JSON.parse(JSON.stringify(FLUID_EXPENSES_DEFAULT));
 
@@ -1796,7 +2083,7 @@ function testRun() {
             jointAccount: JOINT_ACCOUNT_INITIAL,
             transactions: [],
             exchangeRates: { TWD: 1, USD: 32.0, CNY: 4.4 },
-            monthlyIncome: 50000,
+            monthlyIncome: 0,
             fixedExpenses: [],
             fluidExpenses: [],
             expenseCategories: null,
@@ -1843,8 +2130,9 @@ function testRun() {
             };
             const { bgColor, icon } = typeMap[type] || typeMap.info;
             const modalId = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+            const stackIdx = document.querySelectorAll('[id^="toast-"]').length;
             const html = `
-                <div id="${modalId}" class="fixed top-16 left-1/2 -translate-x-1/2 z-[80] w-[calc(100%-32px)] max-w-sm transition-all duration-300 opacity-0 -translate-y-3">
+                <div id="${modalId}" style="top:${64 + stackIdx * 60}px" class="fixed top-16 left-1/2 -translate-x-1/2 z-[80] w-[calc(100%-32px)] max-w-sm transition-all duration-300 opacity-0 -translate-y-3">
                     <div class="flex items-center ${bgColor} text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg" role="alert">
                         <i class="${icon} mr-2.5"></i><p>${message}</p>
                     </div>
@@ -2088,7 +2376,7 @@ function testRun() {
                     appData.transactions = parsedData.transactions || [];
                     appData.exchangeRates = parsedData.exchangeRates || appData.exchangeRates;
                     appData.jointAccount = parsedData.jointAccount || JOINT_ACCOUNT_INITIAL;
-                    appData.monthlyIncome = parsedData.monthlyIncome || 50000;
+                    appData.monthlyIncome = parsedData.monthlyIncome || 0;
                     appData.fixedExpenses = parsedData.fixedExpenses || JSON.parse(JSON.stringify(FIXED_EXPENSES_DEFAULT));
                     appData.stocks = parsedData.stocks || JSON.parse(JSON.stringify(INITIAL_STOCKS));
                     appData.accounts = parsedData.accounts || JSON.parse(JSON.stringify(STATIC_ASSETS));
@@ -2165,6 +2453,12 @@ function testRun() {
             appData.inboxSeenIds = Array.isArray(p.inboxSeenIds) ? p.inboxSeenIds : [];
             appData.inboxLastSync = p.inboxLastSync || null;
             appData.menuPushed = typeof p.menuPushed === 'string' ? p.menuPushed : '';
+            appData.recurring = Array.isArray(p.recurring) ? p.recurring : [];
+            appData.budgets = (p.budgets && typeof p.budgets === 'object' && !Array.isArray(p.budgets)) ? p.budgets : {};
+            appData.budgetAlerted = (p.budgetAlerted && typeof p.budgetAlerted === 'object') ? p.budgetAlerted : null;
+            appData.assetHistory = (p.assetHistory && typeof p.assetHistory === 'object' && !Array.isArray(p.assetHistory)) ? p.assetHistory : {};
+            appData.priceHistory = (p.priceHistory && typeof p.priceHistory === 'object') ? p.priceHistory : null;
+            appData.cloudBackup = !!p.cloudBackup;
             if (!appData.exchangeRates || typeof appData.exchangeRates !== 'object') appData.exchangeRates = { TWD: 1, USD: 32.0, CNY: 4.4 };
             appData.exchangeRates.TWD = 1;
             // 讓既有程式碼直接使用同一份資料
@@ -2237,6 +2531,7 @@ function testRun() {
 
         function saveData() {
             try {
+                recordAssetSnapshot();
                 const dataToSave = {
                     transactions: appData.transactions,
                     exchangeRates: appData.exchangeRates,
@@ -2264,10 +2559,17 @@ function testRun() {
                     pendingInbox: appData.pendingInbox || [],
                     inboxSeenIds: (appData.inboxSeenIds || []).slice(-500),
                     inboxLastSync: appData.inboxLastSync || null,
-                    menuPushed: appData.menuPushed || ''
+                    menuPushed: appData.menuPushed || '',
+                    recurring: appData.recurring || [],
+                    budgets: appData.budgets || {},
+                    budgetAlerted: appData.budgetAlerted || null,
+                    assetHistory: appData.assetHistory || {},
+                    priceHistory: appData.priceHistory || null,
+                    cloudBackup: !!appData.cloudBackup
                 };
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
                 scheduleMenuPush();
+                scheduleBudgetCheck();
             } catch (e) {
                 console.error("保存 LocalStorage 失敗:", e);
                 showAlert('warning', '資料保存失敗，請檢查瀏覽器設定。');
@@ -2309,7 +2611,7 @@ function testRun() {
             });
             document.querySelectorAll('.bk-seg-btn').forEach(b => b.classList.toggle('is-active', b.dataset.sub === sub));
             if (sub === 'batch') renderBatch();
-            if (sub === 'stats') renderExpensePieCharts();
+            if (sub === 'stats') { renderExpensePieCharts(); renderBudgetCard(); renderMonthCompare(); }
         }
 
         function renderTabContent(tabId) {
@@ -2317,8 +2619,10 @@ function testRun() {
                 case 'assets':
                     renderAssets();
                     renderGoalTab();
+                    renderGoalForecast();
                     break;
                 case 'plan':
+                    renderRecurringList();
                     renderFixedPlan();
                     renderMonthlyBillDue();
                     renderCreditCardPrep();
@@ -2338,6 +2642,8 @@ function testRun() {
                     break;
                 case 'goal':
                     renderGoalTab();
+                    renderNetWorthTrend();
+                    fetchPriceHistoryIfStale();
                     break;
             }
         }
@@ -2396,30 +2702,76 @@ function testRun() {
             const expWrap = document.getElementById('settings-expense-categories');
             const incWrap = document.getElementById('settings-income-categories');
             if (!expWrap || !incWrap) return;
+            ['exp', 'inc'].forEach(w => {
+                const on = catSortMode[w];
+                const b = document.getElementById(`sort-${w}-btn`);
+                if (b) {
+                    b.classList.toggle('!bg-accent', on);
+                    b.classList.toggle('!text-white', on);
+                    b.innerHTML = on ? '<i class="fas fa-check text-[10px]"></i>完成' : '<i class="fas fa-sort text-[10px]"></i>排序';
+                }
+                const hint = document.getElementById(`sort-${w}-hint`);
+                if (hint) hint.classList.toggle('hidden', !on);
+                const row = document.getElementById(w === 'exp' ? 'new-expense-row' : 'new-income-row');
+                if (row) row.classList.toggle('hidden', on);
+            });
+            const arrowBtn = (onclick, icon, disabled, title) =>
+                `<button type="button" onclick="${onclick}" ${disabled ? 'disabled' : ''} class="w-9 h-9 rounded-lg grid place-items-center bg-secondary text-primary hover:bg-line active:scale-95 disabled:opacity-25" title="${title}" aria-label="${title}"><i class="fas ${icon} text-xs"></i></button>`;
             const cats = Object.keys(EXPENSE_CATEGORIES);
-            expWrap.innerHTML = cats.map((cat, ci) => `
-                <div class="rounded-xl border border-line p-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="font-bold text-sm text-primary">${escapeHtml(cat)}</span>
-                        <button type="button" onclick="deleteExpenseCategory(${ci})" class="text-xs text-gray-400 hover:text-red-600 px-1" title="刪除此分類"><i class="fas fa-trash-alt mr-1"></i>刪除分類</button>
-                    </div>
-                    <div class="flex flex-wrap gap-1.5 mb-2">
-                        ${(EXPENSE_CATEGORIES[cat] || []).map((sub, si) => `
-                            <span class="inline-flex items-center gap-1 pl-2.5 pr-1 h-7 rounded-full bg-secondary text-xs text-primary">
-                                ${escapeHtml(sub)}
-                                <button type="button" onclick="deleteSubcategory(${ci}, ${si})" class="w-5 h-5 rounded-full grid place-items-center text-gray-400 hover:bg-red-50 hover:text-red-600" title="刪除"><i class="fas fa-xmark text-[10px]"></i></button>
-                            </span>`).join('')}
-                    </div>
-                    <div class="flex gap-2">
-                        <input type="text" id="new-sub-${ci}" placeholder="新增細項" class="field-sm !h-8 text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault();addSubcategory(${ci});}">
-                        <button type="button" onclick="addSubcategory(${ci})" class="h-8 px-3 rounded-lg bg-secondary text-primary text-xs font-bold shrink-0 hover:bg-line">加入</button>
-                    </div>
-                </div>`).join('');
-            incWrap.innerHTML = INCOME_CATEGORIES_LIST.map((c, i) => `
-                <span class="inline-flex items-center gap-1 pl-2.5 pr-1 h-7 rounded-full bg-green-50 text-xs text-green-800">
-                    ${escapeHtml(c)}
-                    <button type="button" onclick="deleteIncomeCategory(${i})" class="w-5 h-5 rounded-full grid place-items-center text-green-700/50 hover:bg-red-50 hover:text-red-600" title="刪除"><i class="fas fa-xmark text-[10px]"></i></button>
-                </span>`).join('');
+            if (catSortMode.exp) {
+                expWrap.innerHTML = cats.map((cat, ci) => {
+                    const subs = EXPENSE_CATEGORIES[cat] || [];
+                    return `
+                    <div class="rounded-xl border border-line p-3">
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <span class="font-bold text-sm text-primary min-w-0 truncate"><span class="text-gray-400 tabular-nums mr-1">${ci + 1}.</span>${escapeHtml(cat)}</span>
+                            <span class="flex gap-1.5 shrink-0">${arrowBtn(`moveExpenseCategory(${ci}, -1)`, 'fa-arrow-up', ci === 0, '往上移')}${arrowBtn(`moveExpenseCategory(${ci}, 1)`, 'fa-arrow-down', ci === cats.length - 1, '往下移')}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5">
+                            ${subs.map((sub, si) => `
+                                <span class="inline-flex items-center h-8 rounded-full bg-secondary text-xs text-primary">
+                                    <button type="button" onclick="moveSubcategory(${ci}, ${si}, -1)" ${si === 0 ? 'disabled' : ''} class="w-7 h-8 grid place-items-center text-gray-500 disabled:opacity-20" aria-label="往前移"><i class="fas fa-chevron-left text-[10px]"></i></button>
+                                    <span>${escapeHtml(sub)}</span>
+                                    <button type="button" onclick="moveSubcategory(${ci}, ${si}, 1)" ${si === subs.length - 1 ? 'disabled' : ''} class="w-7 h-8 grid place-items-center text-gray-500 disabled:opacity-20" aria-label="往後移"><i class="fas fa-chevron-right text-[10px]"></i></button>
+                                </span>`).join('')}
+                        </div>
+                    </div>`;
+                }).join('');
+            } else {
+                expWrap.innerHTML = cats.map((cat, ci) => `
+                    <div class="rounded-xl border border-line p-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-bold text-sm text-primary">${escapeHtml(cat)}</span>
+                            <button type="button" onclick="deleteExpenseCategory(${ci})" class="text-xs text-gray-400 hover:text-red-600 px-1" title="刪除此分類"><i class="fas fa-trash-alt mr-1"></i>刪除分類</button>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5 mb-2">
+                            ${(EXPENSE_CATEGORIES[cat] || []).map((sub, si) => `
+                                <span class="inline-flex items-center gap-1 pl-2.5 pr-1 h-7 rounded-full bg-secondary text-xs text-primary">
+                                    ${escapeHtml(sub)}
+                                    <button type="button" onclick="deleteSubcategory(${ci}, ${si})" class="w-5 h-5 rounded-full grid place-items-center text-gray-400 hover:bg-red-50 hover:text-red-600" title="刪除"><i class="fas fa-xmark text-[10px]"></i></button>
+                                </span>`).join('')}
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="text" id="new-sub-${ci}" placeholder="新增細項" class="field-sm !h-8 text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault();addSubcategory(${ci});}">
+                            <button type="button" onclick="addSubcategory(${ci})" class="h-8 px-3 rounded-lg bg-secondary text-primary text-xs font-bold shrink-0 hover:bg-line">加入</button>
+                        </div>
+                    </div>`).join('');
+            }
+            if (catSortMode.inc) {
+                incWrap.className = 'space-y-1.5';
+                incWrap.innerHTML = INCOME_CATEGORIES_LIST.map((c, i) => `
+                    <div class="flex items-center justify-between gap-2 rounded-xl border border-line pl-3 pr-1.5 py-1.5">
+                        <span class="text-sm text-green-800 font-medium min-w-0 truncate"><span class="text-gray-400 tabular-nums mr-1">${i + 1}.</span>${escapeHtml(c)}</span>
+                        <span class="flex gap-1.5 shrink-0">${arrowBtn(`moveIncomeCategory(${i}, -1)`, 'fa-arrow-up', i === 0, '往上移')}${arrowBtn(`moveIncomeCategory(${i}, 1)`, 'fa-arrow-down', i === INCOME_CATEGORIES_LIST.length - 1, '往下移')}</span>
+                    </div>`).join('');
+            } else {
+                incWrap.className = 'flex flex-wrap gap-1.5';
+                incWrap.innerHTML = INCOME_CATEGORIES_LIST.map((c, i) => `
+                    <span class="inline-flex items-center gap-1 pl-2.5 pr-1 h-7 rounded-full bg-green-50 text-xs text-green-800">
+                        ${escapeHtml(c)}
+                        <button type="button" onclick="deleteIncomeCategory(${i})" class="w-5 h-5 rounded-full grid place-items-center text-green-700/50 hover:bg-red-50 hover:text-red-600" title="刪除"><i class="fas fa-xmark text-[10px]"></i></button>
+                    </span>`).join('');
+            }
         }
 
         function addExpenseCategory() {
@@ -5523,6 +5875,7 @@ function testRun() {
             renderMonthlyBillDue();
             renderFixedPlan();
             renderExpensePieCharts();
+            renderV5Views();
         }
 
         function initBatch() {
@@ -5634,6 +5987,7 @@ function testRun() {
             renderMonthlyBillDue();
             renderFixedPlan();
             renderExpensePieCharts();
+            renderV5Views();
         }
 
         // 信用卡：某筆消費屬於哪一期帳單（帳單月 = 結帳日所在月份）
@@ -6539,6 +6893,8 @@ function testRun() {
         }
         function openDataModal() {
             renderBackupStatus();
+            cloudList = null;
+            renderCloudBackup();
             document.getElementById('data-modal').classList.remove('hidden');
         }
 
@@ -6551,7 +6907,8 @@ function testRun() {
             try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(Object.assign(getUiPrefs(), patch))); } catch (e) {}
         }
         function daysSinceBackup() {
-            const last = getUiPrefs().lastBackupAt;
+            const p = getUiPrefs();
+            const last = Math.max(p.lastBackupAt || 0, p.lastCloudBackupAt || 0) || null;
             return last ? Math.floor((Date.now() - last) / 86400000) : null;
         }
         function renderBackupStatus() {
@@ -6588,6 +6945,8 @@ function testRun() {
             if (e.key !== 'Escape') return;
             const order = [
                 ['confirm-modal', () => closeConfirm(false)],
+                ['recurring-modal', closeRecurringModal],
+                ['budget-modal', closeBudgetModal],
                 ['stock-auto-modal', closeStockAutoModal],
                 ['inbox-review-modal', closeInboxReview],
                 ['statement-modal', closeStatementModal],
@@ -6605,9 +6964,1031 @@ function testRun() {
             }
         });
 
+        // ================= 第 5 版新增：每月自動記帳、分類預算、月比較、資產走勢、雲端備份 =================
+        function ymKey(y, m) { const d = new Date(y, m, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+        function parseYm(s) { const m = /^(\d{4})-(\d{2})$/.exec(String(s || '')); return m ? { y: +m[1], m: +m[2] - 1 } : null; }
+        function ymAdd(s, n) { const p = parseYm(s); return ymKey(p.y, p.m + n); }
+        function ymLabel(s) { const p = parseYm(s); return p ? `${p.y}年${p.m + 1}月` : ''; }
+        function nowYm() { const d = new Date(); return ymKey(d.getFullYear(), d.getMonth()); }
+        function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
+        function fmtTWD(v) { return formatCurrency(v, 'TWD'); }
+
+        // ---------- 每月自動記帳 ----------
+        // 規則：{ id, label, type, name, account, toAccount, amount, currency, day, start:'YYYY-MM', end, note, paused, lastRun }
+        function recurringDate(rule, ym) {
+            const p = parseYm(ym);
+            const day = Math.min(Math.max(1, parseInt(rule.day) || 1), daysInMonth(p.y, p.m));
+            return new Date(p.y, p.m, day, 12, 0, 0);
+        }
+        function recurringNextYm(rule) {
+            let ym = rule.lastRun ? ymAdd(rule.lastRun, 1) : rule.start;
+            if (rule.start && ym < rule.start) ym = rule.start;
+            return ym;
+        }
+        function recurringStatus(rule) {
+            const next = recurringNextYm(rule);
+            if (rule.end && next > rule.end) return { kind: 'ended', text: `已結束（到 ${ymLabel(rule.end)}）` };
+            if (rule.paused) return { kind: 'paused', text: '已暫停' };
+            const d = recurringDate(rule, next);
+            let left = '';
+            if (rule.end) {
+                const p1 = parseYm(next), p2 = parseYm(rule.end);
+                const n = (p2.y - p1.y) * 12 + (p2.m - p1.m) + 1;
+                left = `，還剩 ${n} 期`;
+            }
+            return { kind: 'active', text: `下次 ${d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + '/' : ''}${d.getMonth() + 1}/${d.getDate()}${left}` };
+        }
+
+        function runRecurring() {
+            if (QUICK_MODE) return 0;
+            const rules = appData.recurring || [];
+            if (!rules.length) return 0;
+            const now = new Date();
+            const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            const made = [];
+            rules.forEach(rule => {
+                if (rule.paused || !parseYm(rule.start) || !(parseFloat(rule.amount) > 0)) return;
+                let ym = recurringNextYm(rule);
+                let guard = 0;
+                while (guard++ < 36) {
+                    if (rule.end && ym > rule.end) break;
+                    const when = recurringDate(rule, ym);
+                    if (new Date(when.getFullYear(), when.getMonth(), when.getDate()).getTime() > today0) break;
+                    addTransaction({
+                        id: newTxId(),
+                        name: rule.type === 'transfer' ? '轉帳' : rule.name,
+                        amount: parseFloat(rule.amount),
+                        currency: rule.currency || 'TWD',
+                        type: rule.type,
+                        account: rule.account,
+                        toAccount: rule.type === 'transfer' ? rule.toAccount : null,
+                        timestamp: when.getTime(),
+                        note: [`每月自動記帳：${rule.label}`, rule.note].filter(x => x && String(x).trim()).join('｜'),
+                        isNextCycle: false,
+                        targetAmount: null,
+                        recurringId: rule.id
+                    });
+                    rule.lastRun = ym;
+                    made.push(rule.label);
+                    ym = ymAdd(ym, 1);
+                }
+            });
+            if (made.length) {
+                applyTransactionsToAssets();
+                saveData();
+                const names = [...new Set(made)];
+                showAlert('success', `已自動記帳 ${made.length} 筆：${names.slice(0, 3).join('、')}${names.length > 3 ? ' 等' : ''}`);
+            }
+            return made.length;
+        }
+
+        function recurringTypeMeta(type) {
+            return {
+                expense: { icon: 'fa-arrow-trend-down', cls: 'bg-red-50 text-red-600', sign: '-' },
+                income: { icon: 'fa-arrow-trend-up', cls: 'bg-green-50 text-green-700', sign: '+' },
+                transfer: { icon: 'fa-right-left', cls: 'bg-blue-50 text-blue-700', sign: '' }
+            }[type] || { icon: 'fa-repeat', cls: 'bg-secondary text-primary', sign: '' };
+        }
+
+        function renderRecurringList() {
+            const box = document.getElementById('recurring-list');
+            if (!box) return;
+            const rules = appData.recurring || [];
+            const rows = rules.map((r, i) => {
+                const meta = recurringTypeMeta(r.type);
+                const st = recurringStatus(r);
+                const dayText = parseInt(r.day) >= 31 ? '月底' : `${r.day} 號`;
+                const what = r.type === 'transfer' ? `${r.account} → ${r.toAccount}` : `${r.name} · ${r.account}`;
+                const stCls = st.kind === 'active' ? 'bg-accent/10 text-accent' : 'bg-gray-100 text-gray-500';
+                return `
+                    <button type="button" onclick="openRecurringModal(${i})" class="w-full text-left flex items-center gap-3 p-3 rounded-xl border border-line hover:border-accent transition ${st.kind === 'active' ? '' : 'opacity-60'}">
+                        <span class="w-9 h-9 rounded-full ${meta.cls} grid place-items-center shrink-0"><i class="fas ${meta.icon} text-sm"></i></span>
+                        <span class="min-w-0 flex-1">
+                            <span class="flex items-center justify-between gap-2">
+                                <span class="font-bold text-sm text-primary truncate">${escapeHtml(r.label)}</span>
+                                <span class="font-bold text-sm tabular-nums shrink-0">${meta.sign}${formatCurrency(parseFloat(r.amount) || 0, r.currency || 'TWD')}${r.currency && r.currency !== 'TWD' ? ` <span class="text-[10px] text-gray-400">${r.currency}</span>` : ''}</span>
+                            </span>
+                            <span class="block text-[11px] text-gray-500 truncate">每月 ${dayText} · ${escapeHtml(what)}</span>
+                            <span class="chip ${stCls} mt-1">${st.text}</span>
+                        </span>
+                    </button>`;
+            }).join('');
+            const existing = new Set(rules.map(r => r.label));
+            const suggestions = (appData.fixedExpenses || []).filter(f => f && f.name && !existing.has(f.name));
+            const sugHtml = suggestions.length ? `
+                <div class="pt-1">
+                    <p class="text-[11px] text-gray-400 mb-1.5">從固定支出快速建立：</p>
+                    <div class="flex flex-wrap gap-1.5">
+                        ${suggestions.map(f => `<button type="button" onclick="openRecurringModal(null, this.dataset.name)" data-name="${escapeHtml(f.name)}" class="chip bg-secondary text-primary hover:bg-line !h-7"><i class="fas fa-plus text-[9px]"></i>${escapeHtml(f.name)}</button>`).join('')}
+                    </div>
+                </div>` : '';
+            box.innerHTML = (rows || '<p class="text-center text-gray-400 text-sm py-3">還沒有設定</p>') + sugHtml;
+        }
+
+        let rcType = 'expense';
+        function rcFillSelect(sel, list, value, placeholder) {
+            sel.innerHTML = (placeholder ? `<option value="" disabled ${list.includes(value) ? '' : 'selected'}>${placeholder}</option>` : '') +
+                list.map(x => `<option value="${escapeHtml(x)}" ${x === value ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
+        }
+        function rcSetType(type, keep) {
+            rcType = type;
+            document.querySelectorAll('#rc-type-seg .seg-btn').forEach(b => b.classList.toggle('is-active', b.dataset.type === type));
+            const catWrap = document.getElementById('rc-cat-wrap');
+            const sub = document.getElementById('rc-sub');
+            const toWrap = document.getElementById('rc-to-wrap');
+            catWrap.classList.toggle('hidden', type === 'transfer');
+            catWrap.classList.toggle('grid-cols-2', type === 'expense');
+            toWrap.classList.toggle('hidden', type !== 'transfer');
+            sub.classList.toggle('hidden', type !== 'expense');
+            document.getElementById('rc-account-label').textContent = type === 'income' ? '入帳帳戶' : (type === 'transfer' ? '轉出帳戶' : '付款方式');
+            const k = keep || {};
+            if (type === 'expense') {
+                rcFillSelect(document.getElementById('rc-cat'), Object.keys(EXPENSE_CATEGORIES), k.cat, '分類');
+                rcFillSub(k.sub);
+            } else if (type === 'income') {
+                rcFillSelect(document.getElementById('rc-cat'), INCOME_CATEGORIES_LIST, k.cat, '收入分類');
+            }
+            const methods = allPayMethods();
+            rcFillSelect(document.getElementById('rc-account'), methods, k.account, '請選擇');
+            rcFillSelect(document.getElementById('rc-to'), methods, k.to, '請選擇');
+            rcPreview();
+        }
+        function rcFillSub(value) {
+            const cat = document.getElementById('rc-cat').value;
+            rcFillSelect(document.getElementById('rc-sub'), EXPENSE_CATEGORIES[cat] || [], value, '細項');
+        }
+        function rcRead() {
+            const cat = document.getElementById('rc-cat').value;
+            const sub = document.getElementById('rc-sub').value;
+            return {
+                label: document.getElementById('rc-label').value.trim(),
+                type: rcType,
+                name: rcType === 'expense' ? (cat && sub ? `${cat}-${sub}` : '') : (rcType === 'income' ? cat : '轉帳'),
+                account: document.getElementById('rc-account').value,
+                toAccount: rcType === 'transfer' ? document.getElementById('rc-to').value : null,
+                amount: parseFloat(document.getElementById('rc-amount').value),
+                currency: document.getElementById('rc-currency').value,
+                day: parseInt(document.getElementById('rc-day').value),
+                start: document.getElementById('rc-start').value,
+                end: document.getElementById('rc-end').value || '',
+                note: document.getElementById('rc-note').value.trim()
+            };
+        }
+        function rcPreview() {
+            const el = document.getElementById('rc-preview');
+            if (!el) return;
+            const r = rcRead();
+            if (!parseYm(r.start) || !(r.amount > 0)) { el.textContent = '填好金額和開始月份後，這裡會顯示下一次自動記帳的日期。'; return; }
+            const idx = document.getElementById('rc-id').value;
+            const old = idx !== '' ? appData.recurring[+idx] : null;
+            const tmp = { ...r, lastRun: old && old.start === r.start ? old.lastRun : '' };
+            const next = recurringNextYm(tmp);
+            if (r.end && r.end < r.start) { el.innerHTML = '<span class="text-red-600">結束月份不能早於開始月份</span>'; return; }
+            if (r.end && next > r.end) { el.textContent = '這個設定的所有月份都已經記過了。'; return; }
+            const d = recurringDate(tmp, next);
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            let times = '';
+            if (r.end) { const a = parseYm(next), b = parseYm(r.end); times = `，共 ${(b.y - a.y) * 12 + (b.m - a.m) + 1} 期`; }
+            const pastCount = (() => {
+                let n = 0, ym = next;
+                while (n < 36 && (!r.end || ym <= r.end) && recurringDate(tmp, ym) <= new Date(today.getTime() + 86399999)) { n++; ym = ymAdd(ym, 1); }
+                return n;
+            })();
+            el.innerHTML = pastCount
+                ? `<i class="fas fa-circle-info mr-1 text-amber-600"></i>儲存後會<b>立刻補記 ${pastCount} 筆</b>（${ymLabel(next)}${pastCount > 1 ? ' 起' : ''}）。如果這幾個月已經手動記過，請把開始月份往後調。`
+                : `<i class="fas fa-calendar-check mr-1 text-accent"></i>第一次自動記帳：${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}${times}`;
+        }
+        function openRecurringModal(idx, presetName) {
+            const modal = document.getElementById('recurring-modal');
+            const editing = typeof idx === 'number' && appData.recurring[idx];
+            const r = editing ? appData.recurring[idx] : null;
+            document.getElementById('rc-id').value = editing ? String(idx) : '';
+            document.getElementById('recurring-modal-title').textContent = editing ? '編輯每月自動記帳' : '新增每月自動記帳';
+            const daySel = document.getElementById('rc-day');
+            if (!daySel.options.length) {
+                let h = '';
+                for (let d = 1; d <= 28; d++) h += `<option value="${d}">${d} 號</option>`;
+                h += '<option value="31">月底</option>';
+                daySel.innerHTML = h;
+            }
+            const today = new Date();
+            const fixed = presetName ? (appData.fixedExpenses || []).find(f => f.name === presetName) : null;
+            const defDay = Math.min(today.getDate(), 28);
+            document.getElementById('rc-label').value = r ? r.label : (presetName || '');
+            document.getElementById('rc-amount').value = r ? r.amount : (fixed ? fixed.amount : '');
+            document.getElementById('rc-currency').value = r ? (r.currency || 'TWD') : (fixed ? (fixed.currency || 'TWD') : 'TWD');
+            daySel.value = String(r ? r.day : defDay);
+            // 新增時預設下個月開始，避免和這個月已經手動記的重複
+            document.getElementById('rc-start').value = r ? r.start : ymKey(today.getFullYear(), today.getMonth() + 1);
+            document.getElementById('rc-end').value = r ? (r.end || '') : '';
+            document.getElementById('rc-note').value = r ? (r.note || '') : '';
+            const type = r ? r.type : (/存入|轉/.test(presetName || '') ? 'transfer' : 'expense');
+            let keep = {};
+            if (r) {
+                if (r.type === 'expense') { const i = r.name.indexOf('-'); keep = { cat: r.name.slice(0, i), sub: r.name.slice(i + 1) }; }
+                else if (r.type === 'income') keep = { cat: r.name };
+                keep.account = r.account; keep.to = r.toAccount;
+            } else if (type === 'transfer' && /共同/.test(presetName || '')) {
+                keep.to = appData.jointAccount.name;
+            }
+            rcSetType(type, keep);
+            document.getElementById('rc-actions').classList.toggle('hidden', !editing);
+            if (editing) {
+                const st = recurringStatus(r);
+                document.getElementById('rc-pause-btn').innerHTML = r.paused ? '<i class="fas fa-play"></i>恢復' : '<i class="fas fa-pause"></i>暫停';
+                document.getElementById('rc-pause-btn').classList.toggle('hidden', st.kind === 'ended');
+            }
+            modal.classList.remove('hidden');
+        }
+        function closeRecurringModal() { document.getElementById('recurring-modal').classList.add('hidden'); }
+
+        function saveRecurringRule() {
+            const r = rcRead();
+            if (!r.label) { showAlert('warning', '請輸入名稱'); return; }
+            if (!(r.amount > 0)) { showAlert('warning', '請輸入有效的金額'); return; }
+            if (r.type === 'expense' && !isValidInboxName('expense', r.name)) { showAlert('warning', '請選擇分類和細項'); return; }
+            if (r.type === 'income' && !r.name) { showAlert('warning', '請選擇收入分類'); return; }
+            if (!r.account) { showAlert('warning', '請選擇帳戶'); return; }
+            if (r.type === 'transfer' && (!r.toAccount || r.toAccount === r.account)) { showAlert('warning', '請選擇不同的轉入帳戶'); return; }
+            if (!parseYm(r.start)) { showAlert('warning', '請選擇開始月份'); return; }
+            if (r.end && r.end < r.start) { showAlert('warning', '結束月份不能早於開始月份'); return; }
+            const idx = document.getElementById('rc-id').value;
+            if (idx !== '') {
+                const old = appData.recurring[+idx];
+                // 改了開始月份就從新的開始月份重新計算
+                const lastRun = old.start === r.start ? old.lastRun : (old.lastRun && old.lastRun >= r.start ? old.lastRun : '');
+                appData.recurring[+idx] = { ...old, ...r, lastRun };
+            } else {
+                appData.recurring.push({ id: 'rc-' + newTxId(), ...r, paused: false, lastRun: '' });
+            }
+            saveData();
+            closeRecurringModal();
+            const n = runRecurring();
+            if (n) refreshAllViews(); else renderRecurringList();
+            if (!n) showAlert('success', '已儲存，時間到會自動記帳');
+        }
+        function toggleRecurringPause() {
+            const idx = document.getElementById('rc-id').value;
+            if (idx === '') return;
+            const r = appData.recurring[+idx];
+            r.paused = !r.paused;
+            // 恢復時不補記暫停期間的月份
+            if (!r.paused) {
+                const now = new Date();
+                const cur = nowYm();
+                const thisMonthDue = recurringDate(r, cur) <= now;
+                const skipTo = thisMonthDue ? cur : ymAdd(cur, -1);
+                if (!r.lastRun || r.lastRun < skipTo) r.lastRun = skipTo < r.start ? '' : skipTo;
+            }
+            saveData();
+            closeRecurringModal();
+            renderRecurringList();
+            showAlert('success', r.paused ? `已暫停「${r.label}」` : `已恢復「${r.label}」，從下一次開始記帳`);
+        }
+        async function deleteRecurringRule() {
+            const idx = document.getElementById('rc-id').value;
+            if (idx === '') return;
+            const r = appData.recurring[+idx];
+            const ok = await showConfirm({ title: `刪除「${r.label}」？`, message: '之後不會再自動記帳。已經記過的紀錄會保留。', confirmText: '刪除', danger: true });
+            if (!ok) return;
+            appData.recurring.splice(+idx, 1);
+            saveData();
+            closeRecurringModal();
+            renderRecurringList();
+        }
+
+        // ---------- 分類預算 ----------
+        function periodRange(offset) {
+            const D = getStatsDay();
+            const { y, m } = getStatsPeriodOf(new Date());
+            return { start: new Date(y, m + offset, D), end: new Date(y, m + offset + 1, D - 1, 23, 59, 59, 999), key: ymKey(y, m + offset) };
+        }
+        function categorySpend(start, end) {
+            const cats = {};
+            let gross = 0, offset = 0, income = 0;
+            const s = start.getTime(), e = end.getTime();
+            appData.transactions.forEach(t => {
+                if (t.timestamp < s || t.timestamp > e) return;
+                const kind = statsKind(t);
+                if (!kind) return;
+                const v = txToTWD(t);
+                if (kind === 'expense') {
+                    const cat = (t.name || '').split('-')[0] || '其他';
+                    cats[cat] = (cats[cat] || 0) + v;
+                    gross += v;
+                } else if (kind === 'offset') offset += v;
+                else if (kind === 'income') income += v;
+            });
+            return { cats, gross, offset, income, net: gross - offset };
+        }
+        function budgetEntries() {
+            return Object.entries(appData.budgets || {}).filter(([c, v]) => v > 0);
+        }
+        function budgetColor(p) { return p >= 1 ? 'red' : (p >= 0.8 ? 'amber' : 'green'); }
+
+        function renderBudgetCard() {
+            const box = document.getElementById('budget-list');
+            if (!box) return;
+            const list = budgetEntries();
+            if (!list.length) {
+                box.innerHTML = `<p class="text-sm text-gray-500">還沒有設定預算。按右上「設定」幫常花的分類設定每月上限，用到 <b>80%</b> 和<b>超過</b>時會提醒你。</p>`;
+                return;
+            }
+            const cur = periodRange(0);
+            const spend = categorySpend(cur.start, new Date()).cats;
+            const now = new Date();
+            const daysLeft = Math.max(1, Math.ceil((cur.end - now) / 86400000));
+            const order = Object.keys(EXPENSE_CATEGORIES);
+            list.sort((a, b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99));
+            let totB = 0, totS = 0;
+            box.innerHTML = list.map(([cat, budget]) => {
+                const used = spend[cat] || 0;
+                totB += budget; totS += used;
+                const p = used / budget;
+                const c = budgetColor(p);
+                const bar = { red: 'bg-red-500', amber: 'bg-amber-500', green: 'bg-green-600' }[c];
+                const txt = { red: 'text-red-600', amber: 'text-amber-700', green: 'text-gray-500' }[c];
+                const left = budget - used;
+                return `
+                    <div>
+                        <div class="flex items-center justify-between gap-2 text-sm">
+                            <span class="font-bold text-primary truncate">${escapeHtml(cat)}</span>
+                            <span class="tabular-nums text-xs text-gray-500 shrink-0"><b class="text-primary">${fmtTWD(used)}</b> / ${fmtTWD(budget)}</span>
+                        </div>
+                        <div class="w-full bg-secondary rounded-full h-2 mt-1.5 overflow-hidden"><div class="${bar} h-2 rounded-full" style="width:${Math.min(100, p * 100).toFixed(1)}%"></div></div>
+                        <p class="text-[11px] mt-1 tabular-nums ${txt}">${left >= 0 ? `剩 ${fmtTWD(left)}，還有 ${daysLeft} 天，每天約可用 ${fmtTWD(left / daysLeft)}` : `<i class="fas fa-triangle-exclamation mr-1"></i>已超支 ${fmtTWD(-left)}（${Math.round(p * 100)}%）`}</p>
+                    </div>`;
+            }).join('') + `<p class="text-[11px] text-gray-400 pt-2 border-t border-line tabular-nums">有設預算的分類合計：${fmtTWD(totS)} / ${fmtTWD(totB)}</p>`;
+        }
+
+        // 跨過 80% 或 100% 時各提醒一次（每個統計月重新計算）
+        let budgetCheckTimer = null;
+        function scheduleBudgetCheck() {
+            if (QUICK_MODE) return;
+            clearTimeout(budgetCheckTimer);
+            budgetCheckTimer = setTimeout(checkBudgetAlerts, 700);
+        }
+        function checkBudgetAlerts() {
+            const list = budgetEntries();
+            if (!list.length) return;
+            const cur = periodRange(0);
+            if (!appData.budgetAlerted || appData.budgetAlerted.period !== cur.key) appData.budgetAlerted = { period: cur.key, marks: {} };
+            const marks = appData.budgetAlerted.marks;
+            const spend = categorySpend(cur.start, cur.end).cats;
+            const msgs = [];
+            let worst = 'info';
+            list.forEach(([cat, budget]) => {
+                const p = (spend[cat] || 0) / budget;
+                const level = p >= 1 ? 100 : (p >= 0.8 ? 80 : 0);
+                const prev = marks[cat] || 0;
+                if (level > prev) {
+                    msgs.push(level === 100 ? `「${cat}」已超過本月預算（${Math.round(p * 100)}%）` : `「${cat}」已用掉本月預算 ${Math.round(p * 100)}%`);
+                    if (level === 100) worst = 'danger'; else if (worst !== 'danger') worst = 'warning';
+                }
+                marks[cat] = level;  // 刪除紀錄後降回來，下次再超過會再提醒
+            });
+            const sig = JSON.stringify(marks);
+            if (sig !== appData._budgetSig) { appData._budgetSig = sig; persistQuietly(); }
+            if (msgs.length) showAlert(worst, msgs.join('；'));
+        }
+        // 只寫入 localStorage，不觸發其他同步
+        function persistQuietly() {
+            try {
+                const raw = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || 'null');
+                if (raw) { raw.budgetAlerted = appData.budgetAlerted; localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(raw)); }
+            } catch (e) {}
+        }
+
+        function openBudgetModal() {
+            const box = document.getElementById('budget-edit-list');
+            const p1 = periodRange(-1), p2 = periodRange(-2), p3 = periodRange(-3);
+            const s1 = categorySpend(p1.start, p1.end).cats, s2 = categorySpend(p2.start, p2.end).cats, s3 = categorySpend(p3.start, p3.end).cats;
+            const cats = Object.keys(EXPENSE_CATEGORIES).filter(c => !STATS_EXCLUDED_EXPENSE_CATS.includes(c));
+            Object.keys(appData.budgets || {}).forEach(c => { if (!cats.includes(c)) cats.push(c); });
+            box.innerHTML = cats.map(c => {
+                const avg = ((s1[c] || 0) + (s2[c] || 0) + (s3[c] || 0)) / 3;
+                const v = (appData.budgets || {})[c];
+                return `
+                    <div class="flex items-center gap-3 py-2 border-t border-line first:border-0">
+                        <div class="min-w-0 flex-1">
+                            <p class="font-bold text-sm text-primary truncate">${escapeHtml(c)}</p>
+                            <p class="text-[11px] text-gray-400 tabular-nums">上月 ${fmtTWD(s1[c] || 0)} · 近 3 月平均 ${fmtTWD(avg)}</p>
+                        </div>
+                        <input type="number" inputmode="numeric" min="0" step="100" data-cat="${escapeHtml(c)}" value="${v > 0 ? v : ''}" placeholder="不設定" class="field-sm !w-28 text-right font-bold tabular-nums">
+                    </div>`;
+            }).join('');
+            document.getElementById('budget-modal').classList.remove('hidden');
+        }
+        function closeBudgetModal() { document.getElementById('budget-modal').classList.add('hidden'); }
+        function saveBudgets() {
+            const b = {};
+            document.querySelectorAll('#budget-edit-list input[data-cat]').forEach(inp => {
+                const v = parseFloat(inp.value);
+                if (v > 0) b[inp.dataset.cat] = Math.round(v);
+            });
+            appData.budgets = b;
+            if (appData.budgetAlerted) appData.budgetAlerted.marks = {};
+            saveData();
+            closeBudgetModal();
+            renderBudgetCard();
+            checkBudgetAlerts();
+            showAlert('success', Object.keys(b).length ? `已設定 ${Object.keys(b).length} 個分類的預算` : '已清除預算');
+        }
+
+        // ---------- 跟上個月比 ----------
+        let compareMode = 'mtd';
+        function setCompareMode(m) { compareMode = m; renderMonthCompare(); }
+        function renderMonthCompare() {
+            const box = document.getElementById('compare-body');
+            if (!box) return;
+            document.querySelectorAll('#compare-seg .seg-btn').forEach(b => b.classList.toggle('is-active', b.dataset.mode === compareMode));
+            const cur = periodRange(0), prev = periodRange(-1), prev2 = periodRange(-2);
+            let A, B, la, lb;
+            if (compareMode === 'mtd') {
+                const now = new Date();
+                const elapsed = now - cur.start;
+                const prevEnd = new Date(Math.min(prev.start.getTime() + elapsed, prev.end.getTime()));
+                A = categorySpend(cur.start, now); B = categorySpend(prev.start, prevEnd);
+                la = '本月至今'; lb = `上月同期（到 ${prevEnd.getMonth() + 1}/${prevEnd.getDate()}）`;
+            } else {
+                A = categorySpend(prev.start, prev.end); B = categorySpend(prev2.start, prev2.end);
+                la = `${parseYm(prev.key).m + 1}月`; lb = `${parseYm(prev2.key).m + 1}月`;
+            }
+            const diffHtml = (a, b, goodWhenDown) => {
+                const d = a - b;
+                if (Math.abs(d) < 0.5) return '<span class="text-gray-400">持平</span>';
+                const up = d > 0;
+                const good = goodWhenDown ? !up : up;
+                return `<span class="${good ? 'text-green-700' : 'text-red-600'}"><i class="fas fa-caret-${up ? 'up' : 'down'} mr-0.5"></i>${fmtTWD(Math.abs(d))}</span>`;
+            };
+            const cats = [...new Set([...Object.keys(A.cats), ...Object.keys(B.cats)])]
+                .map(c => [c, A.cats[c] || 0, B.cats[c] || 0])
+                .sort((x, y) => Math.max(y[1], y[2]) - Math.max(x[1], x[2]));
+            const maxV = Math.max(1, ...cats.map(c => Math.max(c[1], c[2])));
+            box.innerHTML = `
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div class="p-3 bg-red-50 rounded-xl">
+                        <p class="text-[11px] text-gray-600">${la}支出</p>
+                        <p class="text-lg font-bold text-red-700 tabular-nums">${fmtTWD(A.net)}</p>
+                        <p class="text-[11px] tabular-nums">${lb.split('（')[0]} ${fmtTWD(B.net)}　${diffHtml(A.net, B.net, true)}</p>
+                    </div>
+                    <div class="p-3 bg-green-50 rounded-xl">
+                        <p class="text-[11px] text-gray-600">${la}收入</p>
+                        <p class="text-lg font-bold text-green-700 tabular-nums">${fmtTWD(A.income)}</p>
+                        <p class="text-[11px] tabular-nums">${lb.split('（')[0]} ${fmtTWD(B.income)}　${diffHtml(A.income, B.income, false)}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 text-[11px] text-gray-500 mb-2">
+                    <span class="flex items-center gap-1"><span class="w-3 h-1.5 rounded-full bg-accent"></span>${la}</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-1.5 rounded-full bg-gray-300"></span>${lb}</span>
+                </div>
+                <div class="space-y-3">
+                    ${cats.length ? cats.map(([c, a, b]) => `
+                        <div>
+                            <div class="flex items-center justify-between gap-2 text-sm">
+                                <span class="text-primary truncate">${escapeHtml(c)}</span>
+                                <span class="tabular-nums shrink-0 text-xs"><b class="text-primary">${fmtTWD(a)}</b>　${diffHtml(a, b, true)}</span>
+                            </div>
+                            <div class="mt-1 space-y-0.5">
+                                <div class="h-1.5 rounded-full bg-accent" style="width:${(a / maxV * 100).toFixed(1)}%"></div>
+                                <div class="h-1.5 rounded-full bg-gray-300" style="width:${(b / maxV * 100).toFixed(1)}%"></div>
+                            </div>
+                        </div>`).join('') : '<p class="text-center text-gray-400 text-sm py-2">兩個月都沒有支出紀錄</p>'}
+                </div>
+                <p class="text-[11px] text-gray-400 mt-3">* 分類金額為消費金額；上方支出已扣除還款／退款，與「本月收支」算法相同</p>`;
+        }
+
+        // ---------- 淨資產走勢與達標預測 ----------
+        function recordAssetSnapshot() {
+            if (QUICK_MODE || !appData.assets || !appData.assets.length) return;
+            if (!appData.assetHistory || typeof appData.assetHistory !== 'object') appData.assetHistory = {};
+            const v = Math.round(calculateTotalAsset());
+            if (isFinite(v)) appData.assetHistory[nowYm()] = v;
+        }
+
+        // 從記帳紀錄的備註「買入 XX 10股 @..」解析股數變化
+        function stockShareEvents() {
+            const ev = [];
+            appData.transactions.forEach(t => {
+                if (t.type !== 'investment_expense' && t.type !== 'investment_income') return;
+                const m = /^(買入|賣出)\s+(.+?)\s+([\d.]+)股\s*@/.exec(t.note || '');
+                if (!m) return;
+                ev.push({ ts: t.timestamp, name: m[2], shares: (m[1] === '買入' ? 1 : -1) * parseFloat(m[3]) });
+            });
+            return ev;
+        }
+
+        // 回傳 [{ ym, value, est }]，最後一個是目前即時值
+        function netWorthSeries(months) {
+            const cur = nowYm();
+            const txs = appData.transactions;
+            let firstYm = cur;
+            txs.forEach(t => { const d = new Date(t.timestamp); const k = ymKey(d.getFullYear(), d.getMonth()); if (k < firstYm) firstYm = k; });
+            Object.keys(appData.assetHistory || {}).forEach(k => { if (parseYm(k) && k < firstYm) firstYm = k; });
+            let startYm = ymAdd(cur, -(months - 1));
+            if (startYm < firstYm) startYm = firstYm;
+            const hist = (appData.priceHistory && appData.priceHistory.data) || {};
+            const events = stockShareEvents();
+            const out = [];
+            for (let ym = startYm; ym <= cur; ym = ymAdd(ym, 1)) {
+                if (ym === cur) { out.push({ ym, value: calculateTotalAsset(), est: false }); break; }
+                const snap = appData.assetHistory && appData.assetHistory[ym];
+                if (snap != null && ym !== cur) { out.push({ ym, value: snap, est: false }); continue; }
+                out.push({ ym, value: estimateNetWorthAt(ym, hist, events), est: true });
+            }
+            return out;
+        }
+
+        function estimateNetWorthAt(ym, hist, events) {
+            const p = parseYm(ym);
+            const end = new Date(p.y, p.m + 1, 1).getTime() - 1;
+            const fx = cur => {
+                if (!cur || cur === 'TWD') return 1;
+                const h = hist['FX:' + cur];
+                return (h && h[ym]) || appData.exchangeRates[cur] || 1;
+            };
+            const bal = {};
+            const cur0 = {};
+            [...appData.accounts, JOINT_ACCOUNT_INITIAL].forEach(a => { bal[a.name] = a.amount; cur0[a.name] = a.currency || 'TWD'; });
+            appData.transactions.forEach(t => {
+                if (t.timestamp > end) return;
+                const conv = (acc, amt) => {
+                    if (t.currency === cur0[acc]) return amt;
+                    return convertToTWD(amt, t.currency) / (appData.exchangeRates[cur0[acc]] || 1);
+                };
+                if (t.account in bal) {
+                    const v = conv(t.account, t.amount);
+                    if (t.type === 'expense' || t.type === 'investment_expense' || t.type === 'transfer') bal[t.account] -= v;
+                    else if (t.type === 'income' || t.type === 'investment_income') bal[t.account] += v;
+                }
+                if (t.type === 'transfer' && t.toAccount && t.toAccount in bal) {
+                    bal[t.toAccount] += t.targetAmount ? t.targetAmount : conv(t.toAccount, t.amount);
+                }
+            });
+            let total = 0;
+            appData.accounts.forEach(a => { total += bal[a.name] * fx(a.currency); });
+            appData.stocks.forEach(s => {
+                let shares = s.shares;
+                events.forEach(e => { if (e.name === s.name && e.ts > end) shares -= e.shares; });
+                if (!(shares > 1e-9)) return;
+                const h = hist[stockKey(s)];
+                let price = h && h[ym];
+                if (!price && h) {
+                    // 缺這個月就用最接近的月份
+                    const keys = Object.keys(h).sort();
+                    const before = keys.filter(k => k <= ym).pop();
+                    price = h[before || keys[0]];
+                }
+                // 沒有歷史股價時用目前股價（只反映股數與現金變化）
+                if (!price) price = s.currentPrice || s.cost || 0;
+                total += shares * price * fx(s.currency);
+            });
+            return total;
+        }
+
+        function avgMonthlyNet(n) {
+            // 最近 n 個完整統計月的平均結餘（收入 − 實際支出）
+            let sum = 0, cnt = 0;
+            for (let i = 1; i <= n; i++) {
+                const r = periodRange(-i);
+                const hasTx = appData.transactions.some(t => t.timestamp >= r.start.getTime() && t.timestamp <= r.end.getTime());
+                if (!hasTx) continue;
+                const s = categorySpend(r.start, r.end);
+                sum += s.income - s.net; cnt++;
+            }
+            return cnt ? { avg: sum / cnt, months: cnt } : null;
+        }
+
+        function goalForecast(series) {
+            const goal = getGoalAmount();
+            const now = series.length ? series[series.length - 1].value : calculateTotalAsset();
+            const res = { goal, now, reached: now >= goal };
+            if (series.length >= 3) {
+                const k = Math.min(6, series.length - 1);
+                const a = series[series.length - 1 - k].value;
+                res.growth = { avg: (now - a) / k, months: k };
+            }
+            res.saving = avgMonthlyNet(6);
+            const eta = (avg) => {
+                if (!(avg > 0)) return null;
+                const n = Math.ceil((goal - now) / avg);
+                const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n);
+                return { n, label: `${d.getFullYear()}年${d.getMonth() + 1}月` };
+            };
+            if (!res.reached) {
+                if (res.growth) res.growth.eta = eta(res.growth.avg);
+                if (res.saving) res.saving.eta = eta(res.saving.avg);
+            }
+            return res;
+        }
+
+        function monthsText(n) {
+            if (n < 12) return `${n} 個月`;
+            const y = Math.floor(n / 12), m = n % 12;
+            return `${y} 年${m ? ` ${m} 個月` : ''}`;
+        }
+
+        let nwChart = null;
+        let lastForecast = null;
+        function renderNetWorthTrend() {
+            const canvas = document.getElementById('nw-chart');
+            const rangeSel = document.getElementById('nw-range');
+            const months = rangeSel ? parseInt(rangeSel.value) || 12 : 12;
+            const series = netWorthSeries(Math.max(months, 7));
+            const shown = series.slice(-months);
+            lastForecast = goalForecast(series);
+            renderGoalForecast();
+            const note = document.getElementById('nw-note');
+            const hasEst = shown.some(p => p.est);
+            if (note) {
+                const ph = appData.priceHistory && appData.priceHistory.data;
+                note.innerHTML = hasEst
+                    ? `<i class="fas fa-circle-info mr-1"></i>虛線是依記帳紀錄回推的估算值（${ph && Object.keys(ph).length ? '股票用當月收盤價' : '股票暫用目前股價，Google 小程式更新到第 5 版後會改用當月收盤價'}）。之後每個月會自動記下實際數字。`
+                    : '每月最後一次打開記帳工具時的總淨資產';
+            }
+            if (!canvas || typeof Chart === 'undefined') return;
+            const labels = shown.map((p, i) => {
+                const q = parseYm(p.ym);
+                return (i === 0 || q.m === 0) ? `${q.y % 100}/${q.m + 1}` : `${q.m + 1}月`;
+            });
+            const data = shown.map(p => Math.round(p.value));
+            const goal = getGoalAmount();
+            const maxV = Math.max(...data, 1);
+            const datasets = [{
+                label: '總淨資產', data, borderColor: '#9C7F66', backgroundColor: 'rgba(156,127,102,0.12)', fill: true, tension: 0.3,
+                pointRadius: 3, pointBackgroundColor: shown.map(p => p.est ? '#fff' : '#9C7F66'), pointBorderColor: '#9C7F66',
+                segment: { borderDash: ctx => (shown[ctx.p0DataIndex] && shown[ctx.p0DataIndex].est) ? [5, 4] : undefined }
+            }];
+            if (goal <= maxV * 1.4) datasets.push({ label: '目標', data: data.map(() => goal), borderColor: '#B4746A', borderDash: [3, 3], borderWidth: 1.5, pointRadius: 0, fill: false });
+            if (nwChart) nwChart.destroy();
+            nwChart = new Chart(canvas, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: {
+                            title: items => ymLabel(shown[items[0].dataIndex].ym) + (shown[items[0].dataIndex].est ? '（估算）' : (items[0].dataIndex === shown.length - 1 ? '（目前）' : '')),
+                            label: c => ` ${c.dataset.label} ${fmtTWD(c.raw)}`
+                        } }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+                        y: { ticks: { font: { size: 10 }, callback: v => Math.abs(v) >= 10000 ? `${Math.round(v / 10000)}萬` : v }, grid: { color: '#EFEAE4' } }
+                    }
+                }
+            });
+        }
+
+        function renderGoalForecast() {
+            const f = lastForecast || goalForecast(netWorthSeries(12));
+            const box = document.getElementById('goal-forecast');
+            const hero = document.getElementById('hero-goal-eta');
+            const line = (title, info, sub) => {
+                if (!info) return `<div class="py-2.5"><p class="text-sm text-primary font-bold">${title}</p><p class="text-xs text-gray-400 mt-0.5">資料還不夠（需要至少 2～3 個月的紀錄）</p></div>`;
+                const avgTxt = `${info.avg >= 0 ? '+' : '−'}${fmtTWD(Math.abs(info.avg))}`;
+                const main = f.reached ? '已達標 🎉'
+                    : (info.eta ? `約 <b class="text-accent">${monthsText(info.eta.n)}</b> 後（${info.eta.label}）` : '<span class="text-red-600">照這個速度無法達標</span>');
+                return `<div class="py-2.5">
+                    <div class="flex items-center justify-between gap-2"><p class="text-sm text-primary font-bold">${title}</p><span class="text-xs tabular-nums ${info.avg >= 0 ? 'text-green-700' : 'text-red-600'}">每月 ${avgTxt}</span></div>
+                    <p class="text-sm mt-0.5">${main}</p>
+                    <p class="text-[11px] text-gray-400 mt-0.5">${sub(info)}</p></div>`;
+            };
+            if (box) {
+                box.innerHTML = `<div class="divide-y divide-line">
+                    ${line('依資產成長速度', f.growth, i => `近 ${i.months} 個月總淨資產平均變化，包含股票漲跌與匯率`)}
+                    ${line('依每月存下的錢', f.saving, i => `近 ${i.months} 個月「收入 − 實際支出」平均，不含股票漲跌`)}
+                </div>
+                ${f.reached
+                    ? `<div class="mt-2 rounded-xl bg-green-50 p-3 flex items-center gap-3"><p class="text-xs text-green-800 flex-1">已經超過目標 ${fmtTWD(f.now - f.goal)}！把目標調高，這裡就會預測新目標什麼時候達成。</p><button onclick="openSettingsModal('general')" class="h-8 px-3 rounded-lg bg-green-700 text-white text-xs font-bold shrink-0">調高目標</button></div>`
+                    : `<p class="text-[11px] text-gray-400 mt-1">距離目標還差 ${fmtTWD(f.goal - f.now)}。預測只是參考，會隨每月實際狀況變動。</p>`}`;
+            }
+            if (hero) {
+                const best = f.growth && f.growth.eta ? f.growth.eta : (f.saving && f.saving.eta ? f.saving.eta : null);
+                hero.textContent = f.reached ? '已達成目標 🎉' : (best ? `照目前速度，預計 ${best.label} 達標` : '');
+                hero.classList.toggle('hidden', !hero.textContent);
+            }
+        }
+
+        // 歷史股價：每天最多抓一次，小程式第 5 版才有
+        let priceHistFetching = false;
+        async function fetchPriceHistoryIfStale(force) {
+            if (QUICK_MODE || !appData.stockApiUrl || priceHistFetching) return;
+            const ph = appData.priceHistory || {};
+            if (!force && ph.updatedAt && Date.now() - ph.updatedAt < 20 * 3600 * 1000) return;
+            if (!force && ph.unsupportedAt && Date.now() - ph.unsupportedAt < 24 * 3600 * 1000) return;
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+            const codes = [...new Set(appData.stocks.filter(s => s.code).map(stockKey))];
+            const fx = [...new Set([...appData.accounts.map(a => a.currency), ...appData.stocks.map(s => s.currency)].filter(c => c && c !== 'TWD'))];
+            if (!codes.length && !fx.length) return;
+            priceHistFetching = true;
+            try {
+                const r = await fetchJsonWithTimeout(scriptUrl({ action: 'history', codes: codes.join(','), fx: fx.join(','), range: '2y' }), 45000);
+                if (r && r.ok && r.history) {
+                    appData.priceHistory = { updatedAt: Date.now(), data: r.history, missing: r.missing || [] };
+                    saveData();
+                    if (isGoalTabVisible()) renderNetWorthTrend(); else renderGoalForecast();
+                } else {
+                    appData.priceHistory = { ...ph, unsupportedAt: Date.now() };
+                }
+            } catch (e) {
+                console.warn('歷史股價取得失敗', e);
+            } finally {
+                priceHistFetching = false;
+            }
+        }
+        function isGoalTabVisible() {
+            const t = document.getElementById('goal-tab');
+            return !!t && !t.classList.contains('hidden');
+        }
+
+        // ---------- 雲端備份（Google 雲端硬碟） ----------
+        const CLOUD_MIN_VERSION = 5;
+        const CLOUD_AUTO_MS = 20 * 3600 * 1000;
+        let cloudBusy = false;
+        let cloudList = null;
+
+        async function postScript(body, ms = 60000) {
+            const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timer = setTimeout(() => ctrl && ctrl.abort(), ms);
+            try {
+                // 不加自訂標頭（text/plain），避免瀏覽器先送 CORS 預檢
+                const res = await fetch(appData.stockApiUrl, { method: 'POST', body: JSON.stringify(body), signal: ctrl ? ctrl.signal : undefined });
+                return await res.json();
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+        function cloudErr(code, message) { const e = new Error(message || code); e.code = code; return e; }
+
+        // 確認小程式版本，沒有密鑰時自動建立（和捷徑記帳共用同一組）
+        async function ensureScriptKey() {
+            if (!appData.stockApiUrl) throw cloudErr('noScript');
+            let ping;
+            try { ping = await fetchJsonWithTimeout(scriptUrl({ action: 'ping' }), 20000); }
+            catch (e) { throw cloudErr('network'); }
+            if (!ping || !(ping.version >= CLOUD_MIN_VERSION)) throw cloudErr('needUpdate');
+            if (appData.inboxKey) return ping;
+            const key = makeInboxKey();
+            const res = await fetchJsonWithTimeout(scriptUrl({ action: 'setkey', key }), 20000);
+            if (!res || !res.ok) throw cloudErr(res && res.code === 'key_taken' ? 'keyTaken' : 'error');
+            appData.inboxKey = key;
+            saveData();
+            return ping;
+        }
+        function cloudErrorText(code) {
+            return {
+                noScript: '需要先設定 Google 小程式',
+                needUpdate: 'Google 小程式需要更新到第 5 版',
+                need_auth: 'Google 小程式還沒有雲端硬碟權限',
+                keyTaken: 'Google 小程式已綁定其他裝置的密鑰',
+                bad_key: '密鑰不正確，請重新貼上設定碼',
+                network: '連不到 Google 小程式，請確認網路',
+                error: '備份失敗，稍後會自動再試'
+            }[code] || '備份失敗，稍後會自動再試';
+        }
+
+        async function cloudBackupNow(manual) {
+            if (cloudBusy) return;
+            if (!manual && typeof navigator !== 'undefined' && navigator.onLine === false) return;
+            cloudBusy = true;
+            renderCloudBackup();
+            try {
+                await ensureScriptKey();
+                saveData();
+                const data = localStorage.getItem(LOCAL_STORAGE_KEY) || '';
+                const r = await postScript({ action: 'backup', key: appData.inboxKey, data });
+                if (!r || !r.ok) throw cloudErr((r && r.code) || 'error', r && r.error);
+                setUiPrefs({ lastCloudBackupAt: Date.now(), lastCloudError: '', lastCloudCount: r.count });
+                if (manual) showAlert('success', `已備份到 Google 雲端硬碟（${r.count} 筆紀錄）`);
+            } catch (err) {
+                const code = (err && err.code) || (err && err.name === 'AbortError' ? 'network' : 'error');
+                setUiPrefs({ lastCloudError: code, lastCloudErrorAt: Date.now() });
+                if (manual) showAlert('danger', cloudErrorText(code));
+            } finally {
+                cloudBusy = false;
+                renderCloudBackup();
+                renderBackupStatus();
+            }
+        }
+
+        function autoCloudBackup() {
+            if (QUICK_MODE || !appData.cloudBackup || !appData.stockApiUrl || cloudBusy) return;
+            const p = getUiPrefs();
+            if (p.lastCloudBackupAt && Date.now() - p.lastCloudBackupAt < CLOUD_AUTO_MS) return;
+            // 失敗後 1 小時內不重試（需要更新或授權時等使用者處理）
+            if (p.lastCloudErrorAt && Date.now() - p.lastCloudErrorAt < 3600 * 1000) return;
+            if (!appData.transactions.length) return;
+            cloudBackupNow(false);
+        }
+
+        async function enableCloudBackup() {
+            appData.cloudBackup = true;
+            saveData();
+            setUiPrefs({ lastCloudErrorAt: 0 });
+            await cloudBackupNow(true);
+        }
+        async function disableCloudBackup() {
+            const ok = await showConfirm({ title: '關閉每天自動備份？', message: '雲端硬碟裡已經有的備份會保留。', confirmText: '關閉', danger: true });
+            if (!ok) return;
+            appData.cloudBackup = false;
+            saveData();
+            renderCloudBackup();
+        }
+
+        // 還原用的連線資訊：本機已設定，或換手機時貼上的設定碼
+        let restoreCfg = null;
+        function cloudCfg() {
+            if (restoreCfg) return restoreCfg;
+            if (appData.stockApiUrl && appData.inboxKey) return { u: appData.stockApiUrl, k: appData.inboxKey };
+            return null;
+        }
+        function cfgUrl(cfg, params) {
+            const q = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+            return cfg.u + (cfg.u.includes('?') ? '&' : '?') + q;
+        }
+        async function loadCloudList() {
+            const cfg = cloudCfg();
+            if (!cfg) { cloudList = { needCode: true }; renderCloudBackup(); return; }
+            cloudList = { loading: true };
+            renderCloudBackup();
+            try {
+                const r = await fetchJsonWithTimeout(cfgUrl(cfg, { action: 'backups', key: cfg.k }), 30000);
+                if (!r || !r.ok) throw cloudErr((r && r.code) || (r && /未知的動作/.test(r.error || '') ? 'needUpdate' : 'error'), r && r.error);
+                cloudList = { items: r.items || [], folderUrl: r.folderUrl || '' };
+            } catch (err) {
+                cloudList = { error: (err && err.code) || 'network' };
+            }
+            renderCloudBackup();
+        }
+        function useRestoreCode() {
+            const inp = document.getElementById('cloud-restore-code');
+            const cfg = decodeQuickCode(inp ? inp.value : '');
+            if (!cfg) { showAlert('warning', '設定碼不正確，請確認有完整貼上'); return; }
+            restoreCfg = cfg;
+            loadCloudList();
+        }
+        async function restoreCloudBackup(id, date) {
+            const cfg = cloudCfg();
+            if (!cfg) return;
+            const ok = await showConfirm({ title: `還原 ${date} 的備份？`, message: '目前這個瀏覽器裡的資料會被覆蓋（會先在這個瀏覽器保留一份還原前的資料）。', confirmText: '還原', danger: true });
+            if (!ok) return;
+            try {
+                const r = await fetchJsonWithTimeout(cfgUrl(cfg, { action: 'restore', key: cfg.k, id }), 60000);
+                if (!r || !r.ok) throw cloudErr((r && r.code) || 'error', r && r.error);
+                const json = JSON.parse(r.data);
+                if (!json || !Array.isArray(json.transactions) || !json.exchangeRates) throw cloudErr('error', '備份內容不正確');
+                if (!json.stockApiUrl) json.stockApiUrl = cfg.u;
+                if (!json.inboxKey) json.inboxKey = cfg.k;
+                try {
+                    const before = localStorage.getItem(LOCAL_STORAGE_KEY);
+                    if (before) localStorage.setItem(LOCAL_STORAGE_KEY + '_before_restore', before);
+                } catch (e) {}
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json));
+                restoreCfg = null;
+                cloudList = null;
+                loadData();
+                refreshAllViews();
+                renderBookkeepingFormOptions();
+                updateCategoryOptions();
+                renderBatch();
+                setUiPrefs({ lastBackupAt: Date.now() });
+                renderBackupStatus();
+                renderCloudBackup();
+                closeDataModal();
+                showAlert('success', `已還原 ${date} 的備份（${json.transactions.length} 筆紀錄）`);
+            } catch (err) {
+                showAlert('danger', '還原失敗：' + ((err && err.code && err.code !== 'error') ? cloudErrorText(err.code) : ((err && err.message) || '連線失敗')));
+            }
+        }
+
+        function renderCloudBackup() {
+            const body = document.getElementById('cloud-backup-body');
+            if (!body) return;
+            const p = getUiPrefs();
+            const step = (n, html) => `<div class="flex gap-2.5"><span class="w-5 h-5 rounded-full bg-accent text-white text-[10px] font-bold grid place-items-center shrink-0 mt-0.5">${n}</span><div class="min-w-0 flex-1 text-xs">${html}</div></div>`;
+            const updateSteps = `
+                <div class="rounded-xl bg-amber-50 border border-amber-200 p-3 space-y-2 text-amber-900">
+                    <p class="text-sm font-bold">${p.lastCloudError === 'need_auth' ? '請允許 Google 小程式存取雲端硬碟' : '請把 Google 小程式更新到第 5 版'}</p>
+                    ${p.lastCloudError === 'need_auth' ? '' : step(1, '<button onclick="copyGasCode()" class="h-7 px-3 rounded-lg bg-amber-600 text-white text-xs font-bold">複製新版程式碼</button>')}
+                    ${p.lastCloudError === 'need_auth' ? '' : step(2, '電腦打開那份試算表 →「擴充功能」→「Apps Script」→ 全選刪掉，貼上 → 儲存')}
+                    ${step(p.lastCloudError === 'need_auth' ? 1 : 3, '編輯器上方的函式選單選「<b>setupBackup</b>」→ 按「<b>執行</b>」→ 依畫面「允許」存取雲端硬碟（出現「尚未驗證」就按「進階」→「前往…」）')}
+                    ${p.lastCloudError === 'need_auth' ? '' : step(4, '右上「部署」→「管理部署作業」→ 鉛筆 → 版本選「<b>新版本</b>」→「部署」（網址不變）')}
+                    ${step(p.lastCloudError === 'need_auth' ? 2 : 5, '回來按下面的「立即備份」')}
+                </div>`;
+            let html = '';
+            if (!appData.stockApiUrl) {
+                html += `<p class="text-xs text-gray-500">每天自動把資料備份到你自己的 Google 雲端硬碟，換手機也能一鍵還原。會用到股價自動更新的那支 Google 小程式。</p>
+                    <button onclick="closeDataModal(); openStockAutoModal();" class="btn-ghost w-full !h-10 text-sm !bg-white border border-line">先設定 Google 小程式</button>`;
+            } else {
+                const last = p.lastCloudBackupAt;
+                const errCode = p.lastCloudError;
+                const status = cloudBusy ? '<i class="fas fa-rotate fa-spin mr-1"></i>備份中…'
+                    : (errCode ? `<i class="fas fa-triangle-exclamation mr-1 text-amber-600"></i>${cloudErrorText(errCode)}${last ? `（上次成功：${formatRateTime(last)}）` : ''}`
+                        : (last ? `<i class="fas fa-circle-check mr-1 text-green-600"></i>上次雲端備份：${formatRateTime(last)}${p.lastCloudCount ? `，${p.lastCloudCount} 筆紀錄` : ''}` : '還沒有備份到雲端'));
+                html += `<p class="text-xs rounded-lg bg-secondary px-3 py-2 text-gray-600">${status}</p>`;
+                if (errCode === 'needUpdate' || errCode === 'need_auth') html += updateSteps;
+                html += `
+                    <label class="flex items-center justify-between gap-3 rounded-xl border border-line p-3 cursor-pointer">
+                        <span class="min-w-0"><span class="block text-sm font-bold text-primary">每天自動備份</span><span class="block text-[11px] text-gray-500">打開記帳工具時，超過一天沒備份就自動備份，保留 60 天</span></span>
+                        <input type="checkbox" class="h-5 w-5 accent-[#9C7F66] shrink-0" ${appData.cloudBackup ? 'checked' : ''} onchange="this.checked ? enableCloudBackup() : (this.checked = true, disableCloudBackup())">
+                    </label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="cloudBackupNow(true)" class="btn-accent !h-10 text-sm" ${cloudBusy ? 'disabled' : ''}><i class="fas fa-cloud-arrow-up"></i>立即備份</button>
+                        <button onclick="loadCloudList()" class="btn-ghost !h-10 text-sm !bg-white border border-line"><i class="fas fa-clock-rotate-left"></i>從雲端還原</button>
+                    </div>`;
+                if (appData.inboxKey) html += `
+                    <div class="rounded-xl bg-secondary/60 p-3">
+                        <p class="text-[11px] text-gray-600 mb-2"><b>換手機時需要「設定碼」</b>才能從雲端還原，建議現在複製起來，存到備忘錄或傳給自己。</p>
+                        <button onclick="copyText(encodeQuickCode(), '設定碼')" class="btn-ghost w-full !h-9 text-xs !bg-white border border-line"><i class="fas fa-key"></i>複製設定碼</button>
+                    </div>`;
+            }
+            // 還原清單
+            if (cloudList) {
+                if (cloudList.needCode || (!appData.stockApiUrl && !restoreCfg)) {
+                    html += `<div class="rounded-xl border border-line p-3 space-y-2">
+                        <p class="text-sm font-bold text-primary">換手機？貼上設定碼還原</p>
+                        <p class="text-[11px] text-gray-500">在舊手機的「備份 → 複製設定碼」取得（WINDS1: 開頭）。</p>
+                        <input id="cloud-restore-code" class="field-sm" placeholder="WINDS1:…" autocomplete="off">
+                        <button onclick="useRestoreCode()" class="btn-accent w-full !h-10 text-sm">查看雲端備份</button></div>`;
+                } else if (cloudList.loading) {
+                    html += '<p class="text-center text-sm text-gray-400 py-3"><i class="fas fa-rotate fa-spin mr-1"></i>讀取雲端備份…</p>';
+                } else if (cloudList.error) {
+                    if (cloudList.error === 'needUpdate' || cloudList.error === 'need_auth') { setUiPrefs({ lastCloudError: cloudList.error }); if (!html.includes('setupBackup')) html += updateSteps; }
+                    else html += `<p class="text-xs text-red-600">${cloudErrorText(cloudList.error)}</p>`;
+                } else if (cloudList.items) {
+                    html += `<div class="rounded-xl border border-line overflow-hidden">
+                        <p class="text-xs font-bold text-gray-500 px-3 py-2 bg-secondary/60">選擇要還原的日期</p>
+                        <div class="max-h-60 overflow-y-auto divide-y divide-line">
+                        ${cloudList.items.length ? cloudList.items.map(it => `
+                            <button onclick="restoreCloudBackup(this.dataset.id, this.dataset.date)" data-id="${escapeHtml(it.id)}" data-date="${escapeHtml(it.date)}" class="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-secondary/60">
+                                <span class="text-sm text-primary font-medium tabular-nums">${escapeHtml(it.date)}</span>
+                                <span class="text-[11px] text-gray-400 tabular-nums">${Math.max(1, Math.round((it.size || 0) / 1024))} KB<i class="fas fa-chevron-right ml-2"></i></span>
+                            </button>`).join('') : '<p class="text-center text-sm text-gray-400 py-3">雲端還沒有備份</p>'}
+                        </div></div>`;
+                }
+            }
+            if (!appData.stockApiUrl && !cloudList) {
+                html += `<button onclick="loadCloudList()" class="w-full text-xs text-accent font-bold py-1">換新手機？用設定碼從雲端還原</button>`;
+            }
+            body.innerHTML = html;
+        }
+
+        // ---------- 分類排序 ----------
+        const catSortMode = { exp: false, inc: false };
+        function toggleCatSort(which) {
+            catSortMode[which] = !catSortMode[which];
+            renderCategorySettings();
+        }
+        function reorderObjectKeys(obj, keys) {
+            const copy = { ...obj };
+            Object.keys(obj).forEach(k => delete obj[k]);
+            keys.forEach(k => { obj[k] = copy[k]; });
+        }
+        function moveExpenseCategory(ci, dir) {
+            const keys = Object.keys(EXPENSE_CATEGORIES);
+            const j = ci + dir;
+            if (j < 0 || j >= keys.length) return;
+            [keys[ci], keys[j]] = [keys[j], keys[ci]];
+            reorderObjectKeys(EXPENSE_CATEGORIES, keys);
+            afterCategoryChange();
+        }
+        function moveSubcategory(ci, si, dir) {
+            const cat = Object.keys(EXPENSE_CATEGORIES)[ci];
+            const arr = cat && EXPENSE_CATEGORIES[cat];
+            const j = si + dir;
+            if (!arr || j < 0 || j >= arr.length) return;
+            [arr[si], arr[j]] = [arr[j], arr[si]];
+            afterCategoryChange();
+        }
+        function moveIncomeCategory(i, dir) {
+            const arr = INCOME_CATEGORIES_LIST;
+            const j = i + dir;
+            if (j < 0 || j >= arr.length) return;
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+            afterCategoryChange();
+        }
+
+        function renderV5Views() {
+            renderRecurringList();
+            renderBudgetCard();
+            renderMonthCompare();
+            renderGoalForecast();
+            if (isGoalTabVisible()) renderNetWorthTrend();
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (QUICK_MODE || document.visibilityState !== 'visible') return;
+            if (runRecurring()) refreshAllViews();
+            autoCloudBackup();
+        });
+
         window.onload = function() {
             if (QUICK_MODE) { initQuickMode(); return; }
             loadData();
+            runRecurring();
             setupTabs();
             renderAssets();
             renderFixedPlan();
@@ -6628,6 +8009,13 @@ function testRun() {
             autoRefreshStocksIfStale();
             updateInboxBanners();
             syncInbox(false);
+            renderV5Views();
+            renderCloudBackup();
+            // 記下這個月的淨資產（走勢圖用）
+            if (appData.assets.length && (appData.assetHistory || {})[nowYm()] !== Math.round(calculateTotalAsset())) saveData();
+            checkBudgetAlerts();
+            autoCloudBackup();
+            setTimeout(fetchPriceHistoryIfStale, 4000);
 
             initKeepEntryPref();
             initBatch();
