@@ -102,6 +102,7 @@
         .tab-content:not(.hidden) { animation: fadeIn .2s ease-out; }
 
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .quick-mode > header, .quick-mode > main, .quick-mode > nav { display: none !important; }
         .main-safe { padding-bottom: calc(env(safe-area-inset-bottom) + 112px); }
         .sticky-above-nav { bottom: calc(env(safe-area-inset-bottom) + 76px); }
 
@@ -118,6 +119,40 @@
     </style>
 </head>
 <body class="min-h-screen antialiased flex flex-col">
+    <!-- 快速記帳小頁面（網址加 ?quick 時顯示） -->
+    <div id="quick-app" class="hidden min-h-screen flex flex-col">
+        <div class="sticky top-0 z-30 bg-secondary/90 backdrop-blur border-b border-line">
+            <div class="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
+                <h1 class="font-serif-tc font-bold text-primary text-lg flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-lg bg-accent text-white grid place-items-center"><i class="fas fa-pen text-sm"></i></span>快速記帳
+                </h1>
+                <div class="seg !p-0.5 w-36">
+                    <button onclick="quickSetType('expense')" data-type="expense" class="seg-btn q-type-btn is-active !h-8">支出</button>
+                    <button onclick="quickSetType('income')" data-type="income" class="seg-btn q-type-btn !h-8">收入</button>
+                </div>
+            </div>
+        </div>
+        <div class="max-w-md mx-auto w-full px-4 pt-3 pb-safe flex-1">
+            <div id="q-home-hint" class="hidden rounded-xl bg-blue-50 text-blue-900 text-xs p-3 mb-3">
+                <b>加到主畫面更方便：</b>點 Safari 下方的「分享」<i class="fas fa-arrow-up-from-bracket mx-0.5"></i> →「加入主畫面」，之後從主畫面圖示打開就是這個頁面。
+            </div>
+            <div id="q-body"></div>
+            <p class="text-[11px] text-gray-400 text-center mt-6 mb-4">送出的紀錄會在下次打開記帳工具時自動入帳</p>
+        </div>
+        <div id="q-acc-sheet" class="hidden fixed inset-0 z-50 flex items-end justify-center">
+            <div class="absolute inset-0 bg-black/40" onclick="closeQuickAccounts()"></div>
+            <div class="relative z-10 w-full max-w-md bg-white rounded-t-3xl p-5 pb-safe max-h-[80vh] overflow-y-auto">
+                <div class="flex items-center justify-between mb-3">
+                    <p class="text-lg font-bold text-primary">付款方式</p>
+                    <button class="icon-btn" onclick="closeQuickAccounts()"><i class="fas fa-xmark"></i></button>
+                </div>
+                <div id="q-acc-tabs" class="seg mb-3"></div>
+                <div id="q-acc-list" class="space-y-2 pb-4"></div>
+            </div>
+        </div>
+        <div id="q-toast" class="hidden"></div>
+    </div>
+
 
     <!-- 頂部標題 -->
     <header class="sticky top-0 z-30 bg-secondary/85 backdrop-blur border-b border-line">
@@ -925,7 +960,7 @@
         </div>
     </div>
     <script type="text/plain" id="gas-source">/**
- * Winds 資產分配計畫 — Google 小程式（Google Apps Script）　版本 3
+ * Winds 資產分配計畫 — Google 小程式（Google Apps Script）　版本 4
  *
  * 用途：
  *   1. 股價查詢：記帳工具把持有的股票代號傳過來，這支程式查好股價後回傳。
@@ -956,8 +991,8 @@ var WAIT_ROUNDS = 8;                 // GOOGLEFINANCE 計算需要一點時間�
 var WAIT_MS = 1200;
 
 var INBOX_SHEET = '_inbox';          // 捷徑記帳暫存區
-var INBOX_COLS = ['id', 'createdAt', 'date', 'type', 'amount', 'currency', 'name', 'account', 'cardHint', 'merchant', 'note', 'source', 'status'];
-var VERSION = 3;
+var INBOX_COLS = ['id', 'createdAt', 'date', 'type', 'amount', 'currency', 'name', 'account', 'cardHint', 'merchant', 'note', 'source', 'status', 'cid'];
+var VERSION = 4;
 
 function doGet(e) {
   return route_(collectParams_(e));
@@ -991,6 +1026,8 @@ function route_(p) {
     if (action === 'add') return handleAdd_(p);
     if (action === 'sms') return handleSms_(p);
     if (action === 'setname') return handleSetName_(p);
+    if (action === 'setmenu') return handleSetMenu_(p);
+    if (action === 'menu') return handleMenu_();
     if (action === 'inbox') return handleInbox_();
     if (action === 'ack') return handleAck_(p);
     return json_({ ok: false, error: '未知的動作：' + action, version: VERSION });
@@ -1095,12 +1132,18 @@ function handleAdd_(p) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) date = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
   var currency = /^[A-Za-z]{3}$/.test(String(p.currency || '')) ? String(p.currency).toUpperCase() : 'TWD';
   var id = Utilities.getUuid();
+  var cid = /^[A-Za-z0-9\-]{6,64}$/.test(String(p.cid || '')) ? String(p.cid) : '';
   var row = [id, Date.now(), date, type, amount, currency,
     cleanText_(p.name, 60), cleanText_(p.account, 60), cleanText_(p.cardHint, 60),
-    cleanText_(p.merchant, 80), cleanText_(p.note, 120), cleanText_(p.source || 'shortcut', 20), 'new'];
+    cleanText_(p.merchant, 80), cleanText_(p.note, 120), cleanText_(p.source || 'shortcut', 20), 'new', cid];
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
+    // 快速記帳頁網路不穩重送時，同一筆（cid 相同）只記一次
+    if (cid) {
+      var existing = readInbox_().filter(function (o) { return o.cid === cid; })[0];
+      if (existing) return json_({ ok: true, id: existing.id, amount: Number(existing.amount), duplicate: true, version: VERSION });
+    }
     inboxSheet_().appendRow(row);
   } finally {
     lock.releaseLock();
@@ -1249,6 +1292,22 @@ function handleAck_(p) {
     lock.releaseLock();
   }
   return json_({ ok: true, acked: done, version: VERSION });
+}
+
+/** 記帳工具把分類、帳戶清單存在這裡，給快速記帳頁使用 */
+function handleSetMenu_(p) {
+  var menu = typeof p.menu === 'string' ? p.menu : JSON.stringify(p.menu || null);
+  try { JSON.parse(menu); } catch (e) { return json_({ ok: false, error: '選單格式不正確', version: VERSION }); }
+  if (!menu || menu.length > 8500) return json_({ ok: false, error: '選單太大', version: VERSION });
+  PropertiesService.getScriptProperties().setProperty('MENU', menu);
+  return json_({ ok: true, version: VERSION });
+}
+
+function handleMenu_() {
+  var raw = PropertiesService.getScriptProperties().getProperty('MENU');
+  var menu = null;
+  try { menu = raw ? JSON.parse(raw) : null; } catch (e) {}
+  return json_({ ok: true, menu: menu, version: VERSION });
 }
 
 /** 要更換密鑰時，在編輯器選這個函式按「執行」，再到記帳工具重新設定 */
@@ -1566,6 +1625,9 @@ function testRun() {
     </div>
 
     <script>
+        // 網址有 ?quick 時，整頁變成「快速記帳」小頁面
+        const QUICK_MODE = new URLSearchParams(location.search).has('quick');
+
         // --- 核心資料與設定 ---
         const LOCAL_STORAGE_KEY = 'winds_finance_data';
         const DEFAULT_GOAL_AMOUNT = 1000000;
@@ -2001,7 +2063,7 @@ function testRun() {
 
         // 手機分頁常常一直開著：回到畫面時若匯率超過 6 小時沒更新就自動更新
         function autoRefreshStocksIfStale() {
-            if (!appData.stockApiUrl) return;
+            if (QUICK_MODE || !appData.stockApiUrl) return;
             if (!appData.stockPricesUpdatedAt || Date.now() - appData.stockPricesUpdatedAt > STOCK_STALE_MS) fetchStockPrices();
         }
         document.addEventListener('visibilitychange', () => {
@@ -2009,7 +2071,7 @@ function testRun() {
         });
 
         function autoRefreshRatesIfStale() {
-            if (appData.ratesManual) return;
+            if (QUICK_MODE || appData.ratesManual) return;
             if (!appData.ratesUpdatedAt || Date.now() - appData.ratesUpdatedAt > RATE_STALE_MS) fetchExchangeRates();
         }
         document.addEventListener('visibilitychange', () => {
@@ -2102,6 +2164,7 @@ function testRun() {
             appData.pendingInbox = Array.isArray(p.pendingInbox) ? p.pendingInbox : [];
             appData.inboxSeenIds = Array.isArray(p.inboxSeenIds) ? p.inboxSeenIds : [];
             appData.inboxLastSync = p.inboxLastSync || null;
+            appData.menuPushed = typeof p.menuPushed === 'string' ? p.menuPushed : '';
             if (!appData.exchangeRates || typeof appData.exchangeRates !== 'object') appData.exchangeRates = { TWD: 1, USD: 32.0, CNY: 4.4 };
             appData.exchangeRates.TWD = 1;
             // 讓既有程式碼直接使用同一份資料
@@ -2200,9 +2263,11 @@ function testRun() {
                     inboxCardMap: appData.inboxCardMap || {},
                     pendingInbox: appData.pendingInbox || [],
                     inboxSeenIds: (appData.inboxSeenIds || []).slice(-500),
-                    inboxLastSync: appData.inboxLastSync || null
+                    inboxLastSync: appData.inboxLastSync || null,
+                    menuPushed: appData.menuPushed || ''
                 };
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
+                scheduleMenuPush();
             } catch (e) {
                 console.error("保存 LocalStorage 失敗:", e);
                 showAlert('warning', '資料保存失敗，請檢查瀏覽器設定。');
@@ -3061,7 +3126,7 @@ function testRun() {
         }
 
         async function syncInbox(manual = false) {
-            if (!inboxReady() || inboxSyncing) return;
+            if (QUICK_MODE || !inboxReady() || inboxSyncing) return;
             if (!manual && Date.now() - inboxLastAttempt < INBOX_MIN_INTERVAL_MS) return;
             if (typeof navigator !== 'undefined' && navigator.onLine === false) {
                 if (manual) showAlert('warning', '目前沒有網路，無法收取捷徑記帳');
@@ -3286,6 +3351,7 @@ function testRun() {
                 saveData();
                 renderShortcutSettings();
                 showAlert('success', '捷徑記帳已啟用，接著照教學建立捷徑');
+                pushQuickMenu(true);
                 openShortcutGuide();
             } catch (err) {
                 // 舊版小程式不認得 ping，也會走到這裡或回傳股價格式
@@ -3363,7 +3429,21 @@ function testRun() {
                     </div>
                     ${pending ? '<button onclick="closeSettingsModal(); openInboxReview();" class="btn-ghost w-full !h-9 text-sm mt-2 !bg-white border border-line">查看待確認</button>' : ''}
                 </div>
-                <button onclick="openShortcutGuide()" class="btn-accent w-full"><i class="fas fa-book-open"></i>建立 iPhone 捷徑（教學）</button>
+                <div class="rounded-xl border border-accent/40 bg-accent/5 p-3">
+                    <p class="text-sm font-bold text-primary"><i class="fas fa-pen mr-1.5 text-accent"></i>快速記帳小頁面</p>
+                    <p class="text-xs text-gray-500 mt-1 mb-2">放在主畫面的獨立圖示：選分類 → 輸入金額 → 送出，不用打開記帳工具。分類和信用卡會自動同步。</p>
+                    <ol class="text-xs text-gray-600 list-decimal pl-4 space-y-1 mb-2">
+                        <li>按「複製網址」</li>
+                        <li>打開 <b>Safari</b>，在網址列貼上並前往</li>
+                        <li>點下方「分享」→「<b>加入主畫面</b>」→「新增」</li>
+                    </ol>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="copyText(quickPageUrl(), '快速記帳網址')" class="btn-accent !h-10 text-sm"><i class="fas fa-link"></i>複製網址</button>
+                        <button onclick="copyText(encodeQuickCode(), '設定碼')" class="btn-ghost !h-10 text-sm !bg-white border border-line"><i class="fas fa-key"></i>複製設定碼</button>
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-2">如果打開後要求「設定碼」，按「複製設定碼」貼上即可。</p>
+                </div>
+                <button onclick="openShortcutGuide()" class="btn-ghost w-full !bg-white border border-line"><i class="fas fa-book-open"></i>Apple Pay／刷卡簡訊自動記帳（教學）</button>
                 <div class="rounded-xl border border-line p-3">
                     <p class="text-sm font-bold text-primary mb-1">Apple Pay／簡訊卡片對應</p>
                     <p class="text-xs text-gray-500 mb-2">在「待確認」勾選「記住這張卡」後會出現在這裡。</p>
@@ -3422,21 +3502,21 @@ function testRun() {
                 action ＝ add<br>key ＝ （貼上密鑰）<br>${extra}</div>`;
 
             document.getElementById('guide-quick').innerHTML = `
-                <p class="text-gray-500 mb-3">做好後放在主畫面，點一下輸入金額、選分類和付款方式就記好，不用打開記帳。</p>
+                <p class="text-gray-500 mb-3">快速記帳改用「小頁面」，比捷徑選單好用：分類分兩層按鈕、信用卡和帳戶分開、還有最近常用。</p>
                 <ol class="space-y-3">
-                    ${li(1, `打開 iPhone 的「${b('捷徑')}」App → 右上「＋」→ 上方名稱改成「記一筆」`)}
-                    ${li(2, `搜尋並加入「${b('要求輸入')}」→ 類型改「數字」，提示寫「金額」`)}
-                    ${li(3, `加入「${b('文字')}」→ 貼上${b('分類清單')} → 加入「${b('分割文字')}」（以「新的一行」分割）→ 加入「${b('從清單中選擇')}」，提示寫「分類」`)}
-                    ${li(4, `再加一次「${b('文字')}」→ 貼上${b('付款方式清單')} →「${b('分割文字')}」→「${b('從清單中選擇')}」，提示寫「付款方式」`)}
-                    ${li(5, `加入「${b('取得 URL 內容')}」→ URL 貼上${b('網址')} → 點「顯示更多」：方法選 ${b('POST')}、要求本文選 ${b('JSON')}，新增這幾個「文字」欄位：
-                        ${fields('amount ＝ 「提供的輸入」（第 2 步的金額）<br>name ＝ 第 3 步的「已選取項目」<br>account ＝ 第 4 步的「已選取項目」<br>source ＝ quick')}
-                        <p class="text-[11px] text-gray-400 mt-1">選變數時點欄位右邊，從上方變數列挑；兩個「已選取項目」要按順序對應。</p>`)}
-                    ${li(6, `（選用）加入「${b('顯示通知')}」，內容寫「已記帳 💰」`)}
-                    ${li(7, `完成後在捷徑上長按 →「分享」→「${b('加入主畫面')}」。也可以放進小工具、設定「背面輕點」或動作按鈕`)}
+                    ${li(1, `按下面的「${b('複製快速記帳網址')}」<button onclick="copyText(quickPageUrl(), '快速記帳網址')" class="mt-2 btn-accent w-full !h-10 text-sm"><i class="fas fa-link"></i>複製快速記帳網址</button>`)}
+                    ${li(2, `打開 ${b('Safari')}，在最上方網址列${b('貼上並前往')}`)}
+                    ${li(3, `點 Safari 下方的「${b('分享')}」→「${b('加入主畫面')}」→ 名稱用「快速記帳」→「新增」`)}
+                    ${li(4, `從主畫面的「快速記帳」圖示打開就能用了。萬一它要求設定碼：<button onclick="copyText(encodeQuickCode(), '設定碼')" class="mt-2 btn-ghost w-full !h-10 text-sm !bg-white border border-line"><i class="fas fa-key"></i>複製設定碼</button>`)}
                 </ol>
-                <p class="text-xs text-gray-400 mt-3">送出後，下次打開記帳工具就會自動入帳。</p>`;
+                <div class="rounded-xl bg-blue-50 text-blue-900 text-xs p-3 mt-3 space-y-1">
+                    <p>• 之前做的「記一筆」捷徑可以刪掉，留著也沒關係，兩種都會送到同一個地方。</p>
+                    <p>• 想用「背面輕點」或動作按鈕叫出來：做一個只有「打開 URL」（貼上同一個網址）的捷徑即可。</p>
+                    <p>• 沒網路時送出會先暫存在小頁面，有網路時自動補送，不會重複。</p>
+                </div>`;
 
             document.getElementById('guide-applepay').innerHTML = `
+                <div class="rounded-xl bg-green-50 text-green-900 text-xs p-3 mb-3"><b>建議用懶人版：</b>第 3 步（選分類）和 name 欄位都不要做，付款後只會安靜送出，回記帳工具「待確認」再用兩層選單補分類，捷徑簡單很多。</div>
                 <p class="text-gray-500 mb-3">用 Apple Pay 感應付款後，iPhone 會跳出通知，點一下選分類就記好。金額、商家、哪張卡會自動帶入。</p>
                 <ol class="space-y-3">
                     ${li(1, `「捷徑」App 下方「${b('自動化')}」→「＋」→ 選「${b('交易')}」`)}
@@ -3456,6 +3536,7 @@ function testRun() {
                     <p class="font-bold mb-1">你的 Google 小程式還不是最新版</p>
                     <p>簡訊記帳需要第 3 版：<button onclick="copyGasCode()" class="underline font-bold">複製新版程式碼</button>，貼到 Apps Script 儲存後，「部署」→「管理部署作業」→ 鉛筆 → 版本選「新版本」→「部署」。</p>
                 </div>
+                <div class="rounded-xl bg-green-50 text-green-900 text-xs p-3 mb-3"><b>建議用懶人版：</b>第一部分只做第 1～2 步就好，不用做「如果」和選分類。簡訊會安靜送出，10 分鐘後出現在記帳工具「待確認」，再用兩層選單補分類。</div>
                 <p class="text-gray-500 mb-3">收到銀行的刷卡／驗證碼簡訊時，自動跳出選分類。不是刷卡的簡訊會被安靜略過，不會再誤跳。</p>
                 <p class="font-bold text-primary mb-2">第一部分：建立「簡訊記帳」捷徑</p>
                 <ol class="space-y-3 mb-4">
@@ -3788,6 +3869,396 @@ function testRun() {
             renderBatchRows();
             closeStatementModal();
             showAlert('success', `已加入 ${rows.length} 列，選好分類後按「儲存」`);
+        }
+
+        // ===================== 快速記帳小頁面（網址加 ?quick） =====================
+        // 獨立放在主畫面的小工具：只負責把記帳送進 Google 小程式收件匣，不讀寫主程式的資料
+        const QUICK_CFG_KEY = 'winds_quick_cfg';
+        const QUICK_MENU_KEY = 'winds_quick_menu';
+        const QUICK_QUEUE_KEY = 'winds_quick_queue';
+        const QUICK_STATS_KEY = 'winds_quick_stats';
+        const QUICK_CAT_ICONS = {
+            '飲食': 'fa-utensils', '交通': 'fa-car', '娛樂': 'fa-film', '購物': 'fa-bag-shopping', '個人': 'fa-user',
+            '醫療': 'fa-kit-medical', '美容美髮': 'fa-scissors', '家庭': 'fa-house', '投資': 'fa-chart-line', '教育': 'fa-book',
+            '薪水': 'fa-sack-dollar', '獎金': 'fa-gift', '股利': 'fa-chart-pie', '利息': 'fa-piggy-bank', '退款': 'fa-rotate-left',
+            '退刷': 'fa-rotate-left', '回饋金': 'fa-coins', '還款': 'fa-hand-holding-dollar'
+        };
+        const quick = { cfg: null, menu: null, type: 'expense', cat: '', name: '', amount: '', account: '', date: '', note: '', step: 'pick', sending: false };
+
+        function qLoad(k, def) { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? def : v; } catch (e) { return def; } }
+        function qSave(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+        function encodeQuickCode() {
+            return 'WINDS1:' + btoa(JSON.stringify({ u: appData.stockApiUrl, k: appData.inboxKey }));
+        }
+        function decodeQuickCode(code) {
+            try {
+                const raw = String(code || '').trim().replace(/^WINDS1:/, '');
+                const o = JSON.parse(atob(raw));
+                if (isValidStockApiUrl(o.u) && /^[A-Za-z0-9]{16,64}$/.test(o.k)) return { u: o.u, k: o.k };
+            } catch (e) {}
+            return null;
+        }
+        function quickPageUrl() {
+            return `${location.origin}${location.pathname}?quick=1#c=${encodeURIComponent(encodeQuickCode())}`;
+        }
+
+        async function qFetch(params, ms = 20000) {
+            const u = quick.cfg.u;
+            const q = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+            return fetchJsonWithTimeout(u + (u.includes('?') ? '&' : '?') + q, ms);
+        }
+
+        function qToast(msg, ok = true) {
+            const el = document.getElementById('q-toast');
+            el.textContent = msg;
+            el.className = `fixed left-1/2 -translate-x-1/2 top-4 z-[90] px-4 py-2.5 rounded-xl text-sm font-bold shadow-lg text-white ${ok ? 'bg-green-600' : 'bg-amber-600'}`;
+            clearTimeout(qToast._t);
+            qToast._t = setTimeout(() => el.classList.add('hidden'), 2200);
+        }
+
+        function initQuickMode() {
+            document.body.classList.add('quick-mode');
+            document.getElementById('quick-app').classList.remove('hidden');
+            document.title = '快速記帳';
+            const appTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+            if (appTitle) appTitle.setAttribute('content', '快速記帳');
+            // 網址裡帶設定碼（#c=...）就自動完成設定
+            const m = /[#&]c=([^&]+)/.exec(location.hash);
+            if (m) {
+                const cfg = decodeQuickCode(decodeURIComponent(m[1]));
+                if (cfg) qSave(QUICK_CFG_KEY, cfg);
+            }
+            quick.cfg = qLoad(QUICK_CFG_KEY, null);
+            quick.menu = qLoad(QUICK_MENU_KEY, null);
+            quick.date = getTodayDateString();
+            const isStandalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+            document.getElementById('q-home-hint').classList.toggle('hidden', isStandalone || !/iPhone|iPad/.test(navigator.userAgent));
+            renderQuick();
+            if (quick.cfg) {
+                refreshQuickMenu();
+                flushQuickQueue();
+            }
+            window.addEventListener('online', flushQuickQueue);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible' && quick.cfg) { quick.date = getTodayDateString(); refreshQuickMenu(); flushQuickQueue(); renderQuick(); }
+            });
+        }
+
+        async function refreshQuickMenu() {
+            try {
+                const r = await qFetch({ action: 'menu', key: quick.cfg.k });
+                if (r && r.ok && r.menu) {
+                    quick.menu = r.menu;
+                    qSave(QUICK_MENU_KEY, r.menu);
+                    renderQuick();
+                } else if (r && r.ok && !r.menu && !quick.menu) {
+                    renderQuick();
+                }
+            } catch (e) { /* 離線就用上次存的選單 */ }
+        }
+
+        function saveQuickSetupCode() {
+            const cfg = decodeQuickCode(document.getElementById('q-setup-code').value);
+            if (!cfg) { qToast('設定碼不正確，請重新複製', false); return; }
+            qSave(QUICK_CFG_KEY, cfg);
+            quick.cfg = cfg;
+            renderQuick();
+            refreshQuickMenu();
+            qToast('設定完成！');
+        }
+
+        function quickStats() {
+            const s = qLoad(QUICK_STATS_KEY, { names: {}, lastAccount: {} });
+            if (typeof s.lastAccount !== 'object' || !s.lastAccount) s.lastAccount = {};
+            return s;
+        }
+
+        function quickRecentNames() {
+            const stats = quickStats();
+            const valid = n => quick.type === 'income'
+                ? (quick.menu.inc || []).includes(n)
+                : (n.includes('-') && ((quick.menu.exp || {})[n.slice(0, n.indexOf('-'))] || []).includes(n.slice(n.indexOf('-') + 1)));
+            const local = Object.entries(stats.names).sort((a, b) => (b[1].n - a[1].n) || (b[1].t - a[1].t)).map(([n]) => n);
+            const merged = [...new Set([...local, ...((quick.type === 'expense' ? quick.menu.recent : quick.menu.recentInc) || [])])];
+            return merged.filter(valid).slice(0, 8);
+        }
+
+        function quickAccounts() {
+            return { cards: quick.menu.cards || [], accounts: quick.menu.accounts || [] };
+        }
+
+        function quickDefaultAccount() {
+            const { cards, accounts } = quickAccounts();
+            const all = [...cards, ...accounts];
+            // 支出、收入各自記住上次用的付款方式（收入通常進銀行帳戶、支出通常刷卡）
+            const last = quickStats().lastAccount[quick.type];
+            if (last && all.includes(last)) return last;
+            if (quick.type === 'income') return accounts[0] || all[0] || '';
+            if (quick.menu.defaultAccount && all.includes(quick.menu.defaultAccount)) return quick.menu.defaultAccount;
+            return all[0] || '';
+        }
+
+        function qLabel(name) {
+            if (quick.type === 'income' || !name.includes('-')) return { main: name, sub: '' };
+            const i = name.indexOf('-');
+            return { main: name.slice(i + 1), sub: name.slice(0, i) };
+        }
+
+        function renderQuick() {
+            const body = document.getElementById('q-body');
+            if (!quick.cfg) {
+                body.innerHTML = `
+                    <div class="card p-5 mt-4">
+                        <p class="text-lg font-bold text-primary mb-1">第一次使用：貼上設定碼</p>
+                        <p class="text-sm text-gray-500 mb-3">打開記帳工具 →「帳戶設定」→「捷徑」→「複製設定碼」，回來貼在下面。</p>
+                        <textarea id="q-setup-code" rows="3" class="w-full p-3 rounded-xl border border-line text-sm font-mono" placeholder="WINDS1:..."></textarea>
+                        <button onclick="saveQuickSetupCode()" class="btn-primary w-full mt-3">完成設定</button>
+                    </div>`;
+                return;
+            }
+            if (!quick.menu) {
+                body.innerHTML = `
+                    <div class="card p-5 mt-4 text-center">
+                        <i class="fas fa-rotate fa-spin text-2xl text-accent mb-2"></i>
+                        <p class="font-bold text-primary">正在載入分類…</p>
+                        <p class="text-xs text-gray-500 mt-1">如果一直沒出現，請先打開一次記帳工具（會自動同步分類和信用卡），再回來這裡。</p>
+                    </div>`;
+                return;
+            }
+            document.querySelectorAll('.q-type-btn').forEach(b => b.classList.toggle('is-active', b.dataset.type === quick.type));
+            if (quick.step === 'amount') { renderQuickAmount(body); return; }
+            renderQuickPick(body);
+        }
+
+        function renderQuickPick(body) {
+            const recent = quickRecentNames();
+            const chip = n => {
+                const l = qLabel(n);
+                return `<button onclick="quickChoose(this.dataset.n)" data-n="${escapeHtml(n)}" class="h-10 px-3.5 rounded-full bg-white border border-line text-sm font-bold text-primary active:bg-secondary">${escapeHtml(l.main)}${l.sub ? `<span class="text-xs font-normal text-gray-400 ml-1">${escapeHtml(l.sub)}</span>` : ''}</button>`;
+            };
+            const tile = (label, onclick, icon, extra = '') => `
+                <button onclick="${onclick}" ${extra} class="aspect-square rounded-2xl bg-white border border-line flex flex-col items-center justify-center gap-1.5 active:bg-secondary">
+                    <span class="w-10 h-10 rounded-full bg-accent/10 text-accent grid place-items-center"><i class="fas ${icon}"></i></span>
+                    <span class="text-sm font-bold text-primary leading-tight text-center px-1">${escapeHtml(label)}</span>
+                </button>`;
+            let grid;
+            if (quick.type === 'income') {
+                grid = `<p class="text-xs font-bold text-gray-400 mb-2">收入類別</p><div class="grid grid-cols-4 gap-2">${(quick.menu.inc || []).map(n =>
+                    tile(n, 'quickChoose(this.dataset.n)', QUICK_CAT_ICONS[n] || 'fa-coins', `data-n="${escapeHtml(n)}"`)).join('')}</div>`;
+            } else if (!quick.cat) {
+                grid = `<p class="text-xs font-bold text-gray-400 mb-2">分類</p><div class="grid grid-cols-4 gap-2">${(quick.menu.expCats || Object.keys(quick.menu.exp || {})).map(c =>
+                    tile(c, 'quickOpenCat(this.dataset.c)', QUICK_CAT_ICONS[c] || 'fa-tag', `data-c="${escapeHtml(c)}"`)).join('')}</div>`;
+            } else {
+                const subs = (quick.menu.exp || {})[quick.cat] || [];
+                grid = `
+                    <button onclick="quickOpenCat('')" class="flex items-center gap-2 h-10 mb-2 text-primary font-bold"><i class="fas fa-chevron-left"></i><i class="fas ${QUICK_CAT_ICONS[quick.cat] || 'fa-tag'} text-accent"></i>${escapeHtml(quick.cat)}</button>
+                    <div class="grid grid-cols-3 gap-2">${subs.map(s => `
+                        <button onclick="quickChoose(this.dataset.n)" data-n="${escapeHtml(quick.cat + '-' + s)}" class="h-14 rounded-2xl bg-white border border-line text-base font-bold text-primary active:bg-secondary">${escapeHtml(s)}</button>`).join('')}</div>`;
+            }
+            const queue = qLoad(QUICK_QUEUE_KEY, []);
+            body.innerHTML = `
+                ${queue.length ? `<div class="rounded-xl bg-amber-50 text-amber-900 text-xs p-2.5 mb-3 flex items-center justify-between gap-2"><span><i class="fas fa-cloud-arrow-up mr-1"></i>${queue.length} 筆等網路恢復後送出</span><button onclick="flushQuickQueue(true)" class="font-bold underline">重試</button></div>` : ''}
+                ${recent.length && !quick.cat ? `<p class="text-xs font-bold text-gray-400 mb-2">最近常用</p><div class="flex flex-wrap gap-2 mb-4">${recent.map(chip).join('')}</div>` : ''}
+                ${grid}`;
+        }
+
+        function quickOpenCat(c) {
+            quick.cat = c;
+            renderQuick();
+        }
+
+        function quickChoose(name) {
+            quick.name = name;
+            quick.cat = quick.type === 'expense' && name.includes('-') ? name.slice(0, name.indexOf('-')) : '';
+            quick.account = quickDefaultAccount();
+            quick.step = 'amount';
+            renderQuick();
+        }
+
+        function quickSetType(t) {
+            quick.type = t;
+            quick.cat = '';
+            quick.step = 'pick';
+            renderQuick();
+        }
+
+        function quickBack() {
+            quick.step = 'pick';
+            renderQuick();
+        }
+
+        function renderQuickAmount(body) {
+            const l = qLabel(quick.name);
+            const isCard = (quick.menu.cards || []).includes(quick.account);
+            const today = getTodayDateString();
+            const dateLabel = quick.date === today ? '今天' : quick.date.slice(5).replace('-', '/');
+            const key = (k, label, cls = '') => `<button onclick="quickKey('${k}')" class="h-14 rounded-2xl bg-white border border-line text-2xl font-medium text-primary active:bg-secondary ${cls}">${label}</button>`;
+            body.innerHTML = `
+                <button onclick="quickBack()" class="flex items-center gap-2 h-10 text-primary font-bold"><i class="fas fa-chevron-left"></i>
+                    <span class="w-8 h-8 rounded-full bg-accent/10 text-accent grid place-items-center text-sm"><i class="fas ${QUICK_CAT_ICONS[l.sub || l.main] || (quick.type === 'income' ? 'fa-coins' : 'fa-tag')}"></i></span>
+                    ${l.sub ? `<span class="text-gray-400 font-normal">${escapeHtml(l.sub)} ›</span>` : ''}${escapeHtml(l.main)}
+                </button>
+                <div class="text-right py-3 px-1">
+                    <span class="text-lg text-gray-400 mr-1">NT$</span><span id="q-amount" class="text-5xl font-bold tabular-nums ${quick.type === 'income' ? 'text-green-700' : 'text-primary'}">${quick.amount ? escapeHtml(Number(quick.amount).toLocaleString('zh-TW', { maximumFractionDigits: 2 })) + (quick.amount.endsWith('.') ? '.' : '') : '0'}</span>
+                </div>
+                <div class="flex gap-2 mb-2">
+                    <button onclick="openQuickAccounts()" class="flex-1 min-w-0 h-11 px-3 rounded-xl bg-white border border-line flex items-center gap-2 text-left">
+                        <i class="fas ${isCard ? 'fa-credit-card' : 'fa-wallet'} text-accent"></i>
+                        <span class="text-sm font-bold text-primary truncate flex-1">${escapeHtml(quick.account || '選擇付款方式')}</span>
+                        <i class="fas fa-chevron-down text-xs text-gray-400"></i>
+                    </button>
+                    <label class="relative h-11 px-3 rounded-xl bg-white border border-line flex items-center gap-1.5 text-sm font-bold text-primary shrink-0">
+                        <i class="far fa-calendar text-accent"></i>${dateLabel}
+                        <input type="date" value="${quick.date}" max="${today}" onchange="quick.date = this.value || getTodayDateString(); renderQuick();" class="absolute inset-0 opacity-0">
+                    </label>
+                </div>
+                <input id="q-note" type="text" value="${escapeHtml(quick.note)}" oninput="quick.note = this.value" placeholder="備註（選填）" class="field mb-3">
+                <div class="grid grid-cols-3 gap-2">
+                    ${['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => key(n, n)).join('')}
+                    ${key('.', '.')}${key('0', '0')}${key('del', '<i class="fas fa-delete-left text-xl"></i>')}
+                </div>
+                <button onclick="quickSend()" ${quick.sending ? 'disabled' : ''} class="w-full h-14 mt-3 rounded-2xl bg-primary text-white text-lg font-bold shadow active:scale-[.98] flex items-center justify-center gap-2">
+                    ${quick.sending ? '<i class="fas fa-rotate fa-spin"></i>送出中…' : '<i class="fas fa-check"></i>送出'}
+                </button>`;
+        }
+
+        function quickKey(k) {
+            let a = quick.amount;
+            if (k === 'del') a = a.slice(0, -1);
+            else if (k === '.') { if (!a.includes('.')) a = (a || '0') + '.'; }
+            else {
+                if (a.includes('.') && a.split('.')[1].length >= 2) return;
+                if (a.replace('.', '').length >= 9) return;
+                a = a === '0' ? k : a + k;
+            }
+            quick.amount = a;
+            const el = document.getElementById('q-amount');
+            if (el) el.textContent = a ? Number(a).toLocaleString('zh-TW', { maximumFractionDigits: 2 }) + (a.endsWith('.') ? '.' : '') : '0';
+        }
+
+        function openQuickAccounts(tab) {
+            const { cards, accounts } = quickAccounts();
+            const cur = tab || ((cards.includes(quick.account) || !accounts.includes(quick.account)) ? 'cards' : 'accounts');
+            const list = cur === 'cards' ? cards : accounts;
+            document.getElementById('q-acc-tabs').innerHTML = `
+                <button onclick="openQuickAccounts('cards')" class="seg-btn ${cur === 'cards' ? 'is-active' : ''}"><i class="fas fa-credit-card mr-1.5"></i>信用卡</button>
+                <button onclick="openQuickAccounts('accounts')" class="seg-btn ${cur === 'accounts' ? 'is-active' : ''}"><i class="fas fa-wallet mr-1.5"></i>帳戶</button>`;
+            document.getElementById('q-acc-list').innerHTML = list.length ? list.map(a => `
+                <button onclick="quickPickAccount(this.dataset.a)" data-a="${escapeHtml(a)}" class="w-full h-12 px-4 rounded-xl border ${a === quick.account ? 'border-accent bg-accent/10' : 'border-line bg-white'} flex items-center justify-between text-left">
+                    <span class="text-sm font-bold text-primary truncate">${escapeHtml(a)}</span>${a === quick.account ? '<i class="fas fa-check text-accent"></i>' : ''}
+                </button>`).join('') : '<p class="text-center text-gray-400 py-6 text-sm">沒有項目</p>';
+            document.getElementById('q-acc-sheet').classList.remove('hidden');
+        }
+        function closeQuickAccounts() { document.getElementById('q-acc-sheet').classList.add('hidden'); }
+        function quickPickAccount(a) { quick.account = a; closeQuickAccounts(); renderQuick(); }
+
+        function makeQuickCid() {
+            const arr = new Uint32Array(3);
+            crypto.getRandomValues(arr);
+            return 'q-' + Array.from(arr, n => n.toString(36)).join('');
+        }
+
+        async function quickSend() {
+            const amount = parseFloat(quick.amount);
+            if (!(amount > 0)) { qToast('請輸入金額', false); return; }
+            if (!quick.account) { openQuickAccounts(); return; }
+            const item = {
+                action: 'add', key: quick.cfg.k, cid: makeQuickCid(), amount: String(amount), type: quick.type,
+                name: quick.name, account: quick.account, date: quick.date, note: quick.note.trim(), source: 'quick'
+            };
+            // 記住常用
+            const stats = quickStats();
+            const s = stats.names[quick.name] || { n: 0, t: 0 };
+            stats.names[quick.name] = { n: s.n + 1, t: Date.now() };
+            stats.lastAccount[quick.type] = quick.account;
+            qSave(QUICK_STATS_KEY, stats);
+            quick.sending = true;
+            renderQuick();
+            let ok = false;
+            try {
+                const r = await qFetch(item, 15000);
+                ok = !!(r && r.ok);
+                if (r && !r.ok && r.code === 'bad_key') { qToast('設定碼已失效，請重新設定', false); quick.sending = false; return; }
+            } catch (e) {}
+            if (!ok) {
+                const queue = qLoad(QUICK_QUEUE_KEY, []);
+                queue.push(item);
+                qSave(QUICK_QUEUE_KEY, queue);
+            }
+            const l = qLabel(quick.name);
+            qToast(ok ? `已記帳 ✓ ${l.main} NT$${amount.toLocaleString('zh-TW')}` : '目前連不上，已暫存，稍後自動送出', ok);
+            quick.sending = false;
+            quick.amount = '';
+            quick.note = '';
+            quick.cat = '';
+            quick.date = getTodayDateString();
+            quick.step = 'pick';
+            renderQuick();
+        }
+
+        let quickFlushing = false;
+        async function flushQuickQueue(manual) {
+            if (quickFlushing || !quick.cfg) return;
+            let queue = qLoad(QUICK_QUEUE_KEY, []);
+            if (!queue.length) return;
+            quickFlushing = true;
+            const left = [];
+            for (const item of queue) {
+                try {
+                    const r = await qFetch({ ...item, key: quick.cfg.k }, 15000);
+                    if (!(r && r.ok)) left.push(item);
+                } catch (e) { left.push(item); }
+            }
+            qSave(QUICK_QUEUE_KEY, left);
+            quickFlushing = false;
+            if (queue.length !== left.length) qToast(`已補送 ${queue.length - left.length} 筆`);
+            else if (manual) qToast('還是連不上，稍後再試', false);
+            if (quick.step === 'pick') renderQuick();
+        }
+
+        // ---------- 主程式：把分類、帳戶同步給快速記帳頁 ----------
+        function buildQuickMenu() {
+            const since = Date.now() - 90 * 86400000;
+            const countBy = (filter) => {
+                const c = {};
+                appData.transactions.forEach(t => { if (t.timestamp >= since && filter(t)) c[t.name] = (c[t.name] || 0) + 1; });
+                return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([n]) => n);
+            };
+            const accCount = {};
+            appData.transactions.forEach(t => { if (t.timestamp >= since && t.type === 'expense') accCount[t.account] = (accCount[t.account] || 0) + 1; });
+            const cards = appData.creditCards.map(c => c.name);
+            const accounts = [...appData.accounts.filter(a => a.type !== 'investment').map(a => a.name), appData.jointAccount.name];
+            const defaultAccount = Object.entries(accCount).sort((a, b) => b[1] - a[1]).map(([a]) => a).find(a => cards.includes(a) || accounts.includes(a)) || cards[0] || accounts[0] || '';
+            return {
+                v: 1,
+                expCats: Object.keys(EXPENSE_CATEGORIES),
+                exp: EXPENSE_CATEGORIES,
+                inc: INCOME_CATEGORIES_LIST,
+                cards, accounts, defaultAccount,
+                recent: countBy(t => t.type === 'expense' && isValidInboxName('expense', t.name) && !isAdjustmentTx(t)).slice(0, 8),
+                recentInc: countBy(t => t.type === 'income' && INCOME_CATEGORIES_LIST.includes(t.name) && !isAdjustmentTx(t)).slice(0, 6)
+            };
+        }
+
+        let menuPushTimer = null;
+        function scheduleMenuPush() {
+            if (QUICK_MODE || !inboxReady()) return;
+            clearTimeout(menuPushTimer);
+            menuPushTimer = setTimeout(pushQuickMenu, 1500);
+        }
+        async function pushQuickMenu(force) {
+            if (QUICK_MODE || !inboxReady()) return;
+            const menu = JSON.stringify(buildQuickMenu());
+            if (!force && menu === appData.menuPushed) return;
+            try {
+                const res = await fetch(appData.stockApiUrl, { method: 'POST', body: JSON.stringify({ action: 'setmenu', key: appData.inboxKey, menu }) });
+                const r = await res.json();
+                if (r && r.ok) {
+                    appData.menuPushed = menu;
+                    saveData();
+                }
+            } catch (e) { console.warn('同步快速記帳選單失敗', e); }
         }
 
         function saveStockPrices() {
@@ -6135,6 +6606,7 @@ function testRun() {
         });
 
         window.onload = function() {
+            if (QUICK_MODE) { initQuickMode(); return; }
             loadData();
             setupTabs();
             renderAssets();
