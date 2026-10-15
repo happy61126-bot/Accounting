@@ -1103,7 +1103,7 @@
         </div>
     </div>
     <script type="text/plain" id="gas-source">/**
- * Winds 資產分配計畫 — Google 小程式（Google Apps Script）　版本 5
+ * Winds 資產分配計畫 — Google 小程式（Google Apps Script）　版本 6
  *
  * 用途：
  *   1. 股價查詢：記帳工具把持有的股票代號傳過來，這支程式查好股價後回傳。
@@ -1113,6 +1113,7 @@
  *   3. 雲端備份：記帳工具每天把資料備份到你自己的 Google 雲端硬碟「Winds記帳備份」資料夾，
  *      保留最近 60 天，換手機時可以一鍵還原。需要密鑰才能存取。
  *   4. 歷史股價：資產走勢圖用的每月收盤價（只收到股票代號）。
+ *   5. 銀行 App 刷卡通知（iOS 27 起）：和刷卡簡訊用同一個「簡訊記帳」捷徑。
  *
  * 從舊版更新：
  *   1. 全選刪掉舊程式碼，貼上這份 → 儲存
@@ -1141,7 +1142,7 @@ var WAIT_MS = 1200;
 
 var INBOX_SHEET = '_inbox';          // 捷徑記帳暫存區
 var INBOX_COLS = ['id', 'createdAt', 'date', 'type', 'amount', 'currency', 'name', 'account', 'cardHint', 'merchant', 'note', 'source', 'status', 'cid'];
-var VERSION = 5;
+var VERSION = 6;
 
 var BACKUP_FOLDER = 'Winds記帳備份';  // 雲端硬碟裡的備份資料夾名稱
 var BACKUP_KEEP = 60;                 // 保留最近幾天的備份
@@ -1300,6 +1301,17 @@ function handleAdd_(p) {
       var existing = readInbox_().filter(function (o) { return o.cid === cid; })[0];
       if (existing) return json_({ ok: true, id: existing.id, amount: Number(existing.amount), duplicate: true, version: VERSION });
     }
+    // Apple Pay：銀行 App 通知先到、而且還沒選分類時，用 Apple Pay 這筆（有商家和分類）取代它
+    if (row[11] === 'applepay') {
+      var cutoff = Date.now() - 20 * 60000;
+      var sh0 = inboxSheet_();
+      readInbox_().forEach(function (o) {
+        if ((o.source === 'notify' || o.source === 'sms') && o.status === 'new' && !o.name &&
+            Number(o.amount) === amount && Number(o.createdAt) > cutoff) {
+          sh0.getRange(o._row, INBOX_COLS.indexOf('status') + 1).setValue('dup');
+        }
+      });
+    }
     inboxSheet_().appendRow(row);
   } finally {
     lock.releaseLock();
@@ -1323,6 +1335,24 @@ function readInbox_() {
 // ---------------- 刷卡簡訊解析 ----------------
 // 每家銀行一條規則；解析不到就回傳 null（捷徑會安靜結束，不跳任何東西）
 var SMS_RULES = [
+  // ---- 銀行 App 推播通知（iOS 27 通知自動化）----
+  { // 星展 Card+：【星展信用卡刷卡交易】約 NT$ 5,000 元 信用卡號末四碼 1234 於 09月 26日 18:35 在 台北市水費 交易。
+    bank: '星展', notify: true,
+    re: /星展信用卡[\s\S]*?NT\$\s*([\d,]+(?:\.\d+)?)\s*元[\s\S]*?末四碼\s*(\d{4})\s*於\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日\s*\d{1,2}:\d{2}\s*在\s*([\s\S]*?)\s*交易/,
+    pick: function (m) { return { amount: m[1], last4: m[2], md: [m[3], m[4]], merchant: m[5] }; } },
+  { // 國泰 CUBE：【刷卡通知】金額NT$982元 卡號末四碼1234於 2023/08/20 10:50在中油－員林快速道站（Ｄ４１７ 刷卡。
+    bank: '國泰', notify: true,
+    re: /刷卡通知\s*[】\]]?\s*金額\s*NT\$\s*([\d,]+(?:\.\d+)?)\s*元[\s\S]*?末四碼\s*(\d{4})\s*於\s*(\d{4})\/(\d{1,2})\/(\d{1,2})\s*\d{1,2}:\d{2}\s*在\s*([\s\S]*?)(?:\s*刷卡|。|$)/,
+    pick: function (m) { return { amount: m[1], last4: m[2], date: m[3] + '-' + pad2_(m[4]) + '-' + pad2_(m[5]), merchant: m[6] }; } },
+  { // 台新 Richart：【信用卡消費通知】您的Richart卡 (末四碼 1234) 於10/14-23:21刷卡消費約新臺幣 2,452 元
+    bank: '台新', notify: true,
+    re: /(?:Richart|台新)[^\d]{0,12}?末四碼\s*(\d{4})\s*\)?\s*於\s*(\d{1,2})\/(\d{1,2})[\s\-]*\d{1,2}:\d{2}\s*刷卡消費約?\s*新[臺台]幣\s*([\d,]+(?:\.\d+)?)\s*元/,
+    pick: function (m) { return { last4: m[1], md: [m[2], m[3]], amount: m[4] }; } },
+  { // 玉山銀行：信用卡消費 740 元通知
+    bank: '玉山', notify: true,
+    re: /信用卡消費\s*(?:NT\$|新[臺台]幣)?\s*([\d,]+(?:\.\d+)?)\s*元通知/,
+    pick: function (m) { return { amount: m[1] }; } },
+  // ---- 刷卡／驗證碼簡訊 ----
   { // 小心詐騙！星展卡末碼 1234 網路交易於 VIESHOW CINEMA  新臺幣 TWD 596.00，驗證碼 234514
     bank: '星展', re: /星展卡末碼\s*(\d{4})[\s\S]*?交易於\s*([\s\S]*?)\s*新[臺台]幣\s*(?:TWD)?\s*\$?\s*([\d,]+(?:\.\d+)?)/,
     pick: function (m) { return { last4: m[1], merchant: m[2], amount: m[3] }; } },
@@ -1347,8 +1377,21 @@ var SMS_RULES = [
     } }
 ];
 
+function pad2_(n) { return ('0' + n).slice(-2); }
+
+/** 只有月/日的通知：年份用今年，若日期在未來就是去年 */
+function dateFromMonthDay_(mo, d) {
+  var now = new Date();
+  var y = now.getFullYear();
+  var cand = new Date(y, Number(mo) - 1, Number(d));
+  if (cand.getTime() > now.getTime() + 86400000) y -= 1;
+  return y + '-' + pad2_(mo) + '-' + pad2_(d);
+}
+
 function parseSms_(text) {
-  var t = String(text || '').replace(/　/g, ' ').replace(/[\r\n]+/g, '');
+  var t = String(text || '');
+  try { t = t.normalize('NFKC'); } catch (e) {}       // 全形英數轉半形（國泰通知會用全形）
+  t = t.replace(/　/g, ' ').replace(/[\r\n]+/g, '');
   for (var i = 0; i < SMS_RULES.length; i++) {
     var rule = SMS_RULES[i];
     var m = t.match(rule.re);
@@ -1356,14 +1399,17 @@ function parseSms_(text) {
     var r = rule.pick(m);
     var amount = parseAmount_(r.amount);
     if (!(amount > 1)) return null;            // 綁卡驗證的 1 元等小額不算
+    var merchant = String(r.merchant || '').replace(/\s+/g, ' ').trim()
+      .replace(/\s*\([^)]*$/, '');                 // 被截斷的「(D417」這類尾巴
     return {
       bank: rule.bank,
       cardHint: rule.bank + (r.last4 ? ' ' + r.last4 : ''),
       amount: amount,
       currency: rule.currency || 'TWD',
-      merchant: String(r.merchant || '').replace(/\s+/g, ' ').trim(),
-      date: r.date || '',
-      type: r.type || 'expense'
+      merchant: merchant,
+      date: r.date || (r.md ? dateFromMonthDay_(r.md[0], r.md[1]) : ''),
+      type: r.type || 'expense',
+      source: rule.notify ? 'notify' : 'sms'
     };
   }
   return null;
@@ -1371,27 +1417,53 @@ function parseSms_(text) {
 
 /** 捷徑把整則簡訊送來；是刷卡就先存進收件匣（還沒分類），回傳摘要給捷徑顯示 */
 function handleSms_(p) {
-  var info = parseSms_(p.text);
-  if (!info) return json_({ ok: true, txn: false, go: 'no', version: VERSION });
+  var text = [p.title, p.text].filter(function (x) { return x; }).join(' ');
+  var info = parseSms_(text);
+  if (!info) {
+    logUnmatched_(text);
+    return json_({ ok: true, txn: false, go: 'no', version: VERSION });
+  }
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    // 同一張卡、同金額，20 分鐘內重複的驗證碼簡訊只算一次
+    // 同一家銀行、同金額，20 分鐘內的簡訊／App 通知只算一次（例如驗證碼簡訊＋刷卡通知）
     var cutoff = Date.now() - 20 * 60000;
     var dup = readInbox_().some(function (o) {
-      return o.source === 'sms' && o.cardHint === info.cardHint && Number(o.amount) === info.amount && Number(o.createdAt) > cutoff;
+      if (Number(o.amount) !== info.amount || !(Number(o.createdAt) > cutoff)) return false;
+      if (o.source === 'applepay') return true;   // Apple Pay 自動化已經記過這筆
+      return (o.source === 'sms' || o.source === 'notify') && sameCard_(o.cardHint, info.cardHint);
     });
     if (dup) return json_({ ok: true, txn: false, go: 'no', duplicate: true, version: VERSION });
     var id = Utilities.getUuid();
     var date = /^\d{4}-\d{2}-\d{2}$/.test(info.date) ? info.date : Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
     inboxSheet_().appendRow([id, Date.now(), date, info.type, info.amount, info.currency, '', '',
-      cleanText_(info.cardHint, 60), cleanText_(info.merchant, 80), '', 'sms', 'new']);
+      cleanText_(info.cardHint, 60), cleanText_(info.merchant, 80), '', info.source, 'new']);
     var money = (info.currency === 'TWD' ? 'NT$' : info.currency + ' ') + info.amount;
     var summary = [info.cardHint, info.merchant, money].filter(function (x) { return x; }).join('・');
     return json_({ ok: true, txn: true, go: 'yes', id: id, amount: info.amount, summary: summary, version: VERSION });
   } finally {
     lock.releaseLock();
   }
+}
+
+/** 「國泰 1234」和「國泰」視為同一張（有一邊沒有末四碼時） */
+function sameCard_(a, b) {
+  var pa = String(a || '').split(' '), pb = String(b || '').split(' ');
+  if (pa[0] !== pb[0]) return false;
+  return !pa[1] || !pb[1] || pa[1] === pb[1];
+}
+
+/** 看起來像刷卡、但沒有規則能解析的內容，留最近 30 則在「_unmatched」分頁，方便新增規則 */
+function logUnmatched_(text) {
+  var t = String(text || '');
+  if (!t || !/\d/.test(t) || !/(元|NT|TWD|\$|消費|刷卡|交易)/.test(t)) return;
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName('_unmatched') || ss.insertSheet('_unmatched');
+    sh.appendRow([Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm'), cleanText_(t, 300)]);
+    var extra = sh.getLastRow() - 30;
+    if (extra > 0) sh.deleteRows(1, extra);
+  } catch (e) {}
 }
 
 /** 捷徑選好分類後補上 */
@@ -1417,7 +1489,7 @@ function handleInbox_() {
   // 簡訊記帳在還沒選分類前先保留 10 分鐘，避免記帳工具剛好在選分類時把它收走
   var hold = Date.now() - 10 * 60000;
   var items = readInbox_().filter(function (o) {
-    return o.status === 'new' && !(o.source === 'sms' && !o.name && Number(o.createdAt) > hold);
+    return o.status === 'new' && !((o.source === 'sms' || o.source === 'notify') && !o.name && Number(o.createdAt) > hold);
   }).slice(0, 300)
     .map(function (o) { delete o._row; delete o.status; return o; });
   return json_({ ok: true, items: items, version: VERSION });
@@ -1441,7 +1513,7 @@ function handleAck_(p) {
     var cutoff = Date.now() - 30 * 86400000;
     for (var i = rows.length - 1; i >= 0; i--) {
       var o = rows[i];
-      var isDone = o.status === 'done' || want[o.id];
+      var isDone = o.status === 'done' || o.status === 'dup' || want[o.id];
       if (isDone && Number(o.createdAt) < cutoff) sh.deleteRow(o._row);
     }
   } finally {
@@ -1742,6 +1814,7 @@ function json_(obj) {
 /** 測試簡訊解析：在編輯器選這個函式按「執行」，到「執行紀錄」看結果 */
 function testSms() {
   Logger.log(JSON.stringify(parseSms_('小心詐騙！星展卡末碼 1234 網路交易於 VIESHOW CINEMA  新臺幣 TWD 596.00，驗證碼 234514')));
+  Logger.log(JSON.stringify(parseSms_('Richart 【信用卡消費通知】您的Richart卡 (末四碼 5678) 於10/14-23:21刷卡消費約新臺幣 2,452 元，實際消費資訊以帳單為準')));
 }
 
 function testRun() {
@@ -1779,6 +1852,7 @@ function testRun() {
                     <button onclick="switchGuideTab('quick')" class="seg-btn !px-1 guide-tab-btn is-active" data-target="guide-quick">快速記帳</button>
                     <button onclick="switchGuideTab('applepay')" class="seg-btn !px-1 guide-tab-btn" data-target="guide-applepay">Apple Pay</button>
                     <button onclick="switchGuideTab('sms')" class="seg-btn !px-1 guide-tab-btn" data-target="guide-sms">刷卡簡訊</button>
+                    <button onclick="switchGuideTab('notify')" class="seg-btn !px-1 guide-tab-btn" data-target="guide-notify">App 通知</button>
                 </div>
             </div>
             <div class="px-5 pb-6 pb-safe text-sm">
@@ -1786,6 +1860,7 @@ function testRun() {
                 <div id="guide-quick" class="guide-tab-content"></div>
                 <div id="guide-applepay" class="guide-tab-content hidden"></div>
                 <div id="guide-sms" class="guide-tab-content hidden"></div>
+                <div id="guide-notify" class="guide-tab-content hidden"></div>
             </div>
         </div>
     </div>
@@ -3569,7 +3644,7 @@ function testRun() {
             const methods = allPayMethods();
             const accOpts = `<option value="" ${methods.includes(item.account) ? '' : 'selected'} disabled>付款方式</option>` +
                 methods.map(m => `<option value="${escapeHtml(m)}" ${m === item.account ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
-            const srcLabel = { applepay: 'Apple Pay', sms: '簡訊', quick: '快速記帳' }[item.source] || '捷徑';
+            const srcLabel = { applepay: 'Apple Pay', sms: '簡訊', notify: 'App 通知', quick: '快速記帳' }[item.source] || '捷徑';
             const hintHtml = item.cardHint
                 ? `<label class="flex items-center gap-1.5 text-[11px] text-gray-500 mt-1 cursor-pointer"><input type="checkbox" data-f="remember" class="h-4 w-4 accent-[#9C7F66]" checked>記住「${escapeHtml(item.cardHint)}」就是這張卡</label>` : '';
             return `
@@ -3822,6 +3897,8 @@ function testRun() {
             fetchJsonWithTimeout(scriptUrl({ action: 'ping' }), 15000).then(r => {
                 const warn = document.getElementById('guide-sms-version');
                 if (warn) warn.classList.toggle('hidden', !!(r && r.version >= 3));
+                const warn2 = document.getElementById('guide-notify-version');
+                if (warn2) warn2.classList.toggle('hidden', !!(r && r.version >= 6));
             }).catch(() => {});
         }
         function closeShortcutGuide() {
@@ -3883,6 +3960,32 @@ function testRun() {
                     <p>• 懶人版：第 3 步可以省略、name 欄位也不填，全部進「待確認」再一次補分類。</p>
                     <p>• 只有 Apple Pay 感應才會觸發；刷實體卡、網購請用「記一筆」或月底批次補帳。</p>
                 </div>`;
+            document.getElementById('guide-notify').innerHTML = `
+                <div id="guide-notify-version" class="hidden rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 mb-3">
+                    <p class="font-bold mb-1">請先把 Google 小程式更新到第 6 版</p>
+                    <p><button onclick="copyGasCode()" class="underline font-bold">複製新版程式碼</button>，貼到 Apps Script 儲存後，「部署」→「管理部署作業」→ 鉛筆 → 版本選「新版本」→「部署」（網址不變）。</p>
+                </div>
+                <p class="text-gray-500 mb-3">iOS 27 起可以在收到銀行 App 推播時自動記帳，<b>不用驗證碼的消費（例如淘寶、已綁定的平台）也抓得到</b>。直接沿用「刷卡簡訊」分頁做好的「簡訊記帳」捷徑，只要多做自動化。</p>
+                <ol class="space-y-3">
+                    ${li(1, `「捷徑」App 下方「${b('自動化')}」→「＋」→「${b('通知')}」，會出現「當我收到來自 ${b('App')} 的通知時」`)}
+                    ${li(2, `點藍色的「${b('App')}」，選銀行 App：
+                        <div class="mt-1.5 rounded-lg bg-secondary/70 p-2 text-xs leading-relaxed">
+                            <b>國泰世華 CUBE</b>　【刷卡通知】金額NT$…<br>
+                            <b>Richart</b>（台新）　【信用卡消費通知】…<br>
+                            <b>玉山銀行</b>　信用卡消費 … 元通知<br>
+                            <b>星展 Card+</b>　【星展信用卡刷卡交易】…
+                        </div>
+                        <span class="block text-[11px] text-gray-400 mt-1">可以多選就一次選完；只能選一個的話，每個 App 各做一個自動化（2～4 步重複）。</span>`)}
+                    ${li(3, `「加入過濾條件」${b('可以不用設')}。不是刷卡的通知（轉帳、優惠活動）送過去會被安靜略過，不會記帳。`)}
+                    ${li(4, `用下方的搜尋列加入動作「${b('執行捷徑')}」→ 選「${b('簡訊記帳')}」。如果它有「輸入」可以選，選「${b('捷徑輸入')}」（也就是那則通知）`)}
+                    ${li(5, `如果有「${b('立即執行')}／執行前先詢問」的選項，選「立即執行」並關掉「執行時通知」→ 完成`)}
+                </ol>
+                <div class="rounded-xl bg-blue-50 text-blue-900 text-xs p-3 mt-3 space-y-1">
+                    <p>• 同一筆消費如果<b>簡訊和 App 通知都收到</b>，或已經被 Apple Pay 自動化記過，20 分鐘內同銀行同金額只會記一次。</p>
+                    <p>• 跟簡訊一樣，送出後 10 分鐘會出現在記帳工具的「待確認」，補上分類就入帳。第一次遇到某張卡記得勾「記住」。</p>
+                    <p>• 玉山的通知沒有卡號，會先顯示為「玉山」，在待確認選一次卡片並勾「記住」即可。</p>
+                    <p>• 刷了卡卻沒出現：打開那份 Google 試算表，看「<b>_unmatched</b>」分頁有沒有那則通知，截圖給我就能加規則。</p>
+                </div>`;
             document.getElementById('guide-sms').innerHTML = `
                 <div id="guide-sms-version" class="hidden rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 mb-3">
                     <p class="font-bold mb-1">你的 Google 小程式還不是最新版</p>
@@ -3907,7 +4010,7 @@ function testRun() {
                 <p class="font-bold text-primary mb-2">第二部分：建立 4 個自動化（每個關鍵字一個）</p>
                 <ol class="space-y-3">
                     ${li(1, `「捷徑」App 下方「${b('自動化')}」→「＋」→「${b('訊息')}」→「訊息包含」輸入關鍵字 → 選「${b('立即執行')}」→「下一步」`)}
-                    ${li(2, `加入「${b('執行捷徑')}」→ 選「簡訊記帳」→ 點「輸入」選「${b('捷徑輸入')}」，再點它選「${b('內容')}」`)}
+                    ${li(2, `選「${b('簡訊記帳')}」捷徑就完成了。新版 iOS 會自動把簡訊內容傳給捷徑，不用另外設定輸入。<span class="block text-[11px] text-gray-400 mt-1">（舊版 iOS 若出現「執行捷徑」動作，才需要點「輸入」選「捷徑輸入」）</span>`)}
                     ${li(3, `重複 1～2，用這 4 個關鍵字各做一個：
                         <div class="mt-1.5 rounded-lg bg-secondary/70 p-2 text-xs leading-relaxed">
                             <b>卡末碼</b>　星展、台新、國泰的驗證碼簡訊<br>
