@@ -583,7 +583,10 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="card p-4">
                             <h4 class="section-title">本月消費分析</h4>
-                            <p class="text-xs text-gray-400 mb-2" data-stats-label="range">每月5號~下個月4號</p>
+                            <div class="flex items-center justify-between gap-2 mb-2">
+                                <p id="pie-range-label" class="text-xs text-gray-500 tabular-nums"></p>
+                                <select id="pie-day-select" class="field-sm !w-auto max-w-[170px]" onchange="setPieDay(this.value)" aria-label="圓餅圖從每月幾號開始算"></select>
+                            </div>
                             <div class="w-full relative" style="height: 280px;"><canvas id="monthly-pie-chart"></canvas></div>
                             <p id="monthly-pie-note" class="hidden text-[11px] text-gray-400 mt-2 tabular-nums"></p>
                         </div>
@@ -2469,6 +2472,7 @@ function testRun() {
                     appData.accounts = parsedData.accounts || JSON.parse(JSON.stringify(STATIC_ASSETS));
                     appData.creditCards = parsedData.creditCards || JSON.parse(JSON.stringify(CREDIT_CARDS_INITIAL));
                     appData.paidBills = parsedData.paidBills || [];
+                    migratePaidBills();
 
                     const nameMapping = {};
                     if (appData.stocks) {
@@ -2538,6 +2542,7 @@ function testRun() {
             appData.assetHistory = (p.assetHistory && typeof p.assetHistory === 'object' && !Array.isArray(p.assetHistory)) ? p.assetHistory : {};
             appData.priceHistory = (p.priceHistory && typeof p.priceHistory === 'object') ? p.priceHistory : null;
             appData.cloudBackup = !!p.cloudBackup;
+            appData.pieStartDay = parseInt(p.pieStartDay) || 0;
             if (!appData.exchangeRates || typeof appData.exchangeRates !== 'object') appData.exchangeRates = { TWD: 1, USD: 32.0, CNY: 4.4 };
             appData.exchangeRates.TWD = 1;
             // 讓既有程式碼直接使用同一份資料
@@ -2644,7 +2649,8 @@ function testRun() {
                     budgetAlerted: appData.budgetAlerted || null,
                     assetHistory: appData.assetHistory || {},
                     priceHistory: appData.priceHistory || null,
-                    cloudBackup: !!appData.cloudBackup
+                    cloudBackup: !!appData.cloudBackup,
+                    pieStartDay: appData.pieStartDay || 0
                 };
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
                 scheduleMenuPush();
@@ -2745,7 +2751,8 @@ function testRun() {
                 note: `手動繳納帳單`
             };
             addTransaction(newTrans);
-            appData.paidBills.push({ id: billId, cardName: cardName, amount: amount, payDate: Date.now() });
+            const stmtM = /-(\d{4}-\d{2})$/.exec(billId);
+            appData.paidBills.push({ id: billId, cardName: cardName, stmt: stmtM ? stmtM[1] : '', amount: amount, payDate: Date.now() });
 
             applyTransactionsToAssets();
             saveData();
@@ -3104,26 +3111,129 @@ function testRun() {
             }
         }
 
+        // 繳款日：繳款日比結帳日早（例如 25 號結帳、10 號繳款）就是下個月繳
+        function cardPayDate(card, y, m) {
+            const pd = parseInt(card.paymentDay) || 1, bd = parseInt(card.billingDay) || 1;
+            return new Date(y, pd <= bd ? m + 1 : m, pd);
+        }
+        // 舊的已繳紀錄（編號裡是繳款日的時間）補上帳單月份
+        function migratePaidBills() {
+            (appData.paidBills || []).forEach(b => {
+                if (b.stmt) return;
+                const m = /-(\d{4}-\d{2})$/.exec(b.id || '') ;
+                if (m) { b.stmt = m[1]; return; }
+                const t = /-(\d{10,})$/.exec(b.id || '');
+                if (t) { const d = new Date(+t[1]); b.stmt = ymKey(d.getFullYear(), d.getMonth()); }
+            });
+        }
+
+        let editingCardIdx = -1;
+        function toggleCardEdit(i) {
+            editingCardIdx = editingCardIdx === i ? -1 : i;
+            renderSettingsCards();
+        }
+        function dayOptions(sel) {
+            let h = '';
+            for (let d = 1; d <= 31; d++) h += `<option value="${d}" ${d === parseInt(sel) ? 'selected' : ''}>${d} 日</option>`;
+            return h;
+        }
+
         function renderSettingsCards() {
             const list = document.getElementById('settings-card-list');
-            list.innerHTML = '';
-            appData.creditCards.forEach((card, index) => {
-                list.innerHTML += `
+            list.innerHTML = appData.creditCards.map((card, index) => {
+                if (index === editingCardIdx) {
+                    const accOpts = appData.accounts.map(a => `<option value="${escapeHtml(a.name)}" ${a.name === card.linkedAccount ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('');
+                    return `
+                    <div class="p-3 bg-white border-2 border-accent/50 rounded-xl space-y-2">
+                        <label class="block"><span class="text-xs text-gray-500">卡片名稱</span>
+                            <input id="card-edit-name" class="field-sm" value="${escapeHtml(card.name)}" maxlength="40"></label>
+                        <label class="block"><span class="text-xs text-gray-500">扣款帳戶</span>
+                            <select id="card-edit-linked" class="field-sm">${accOpts}</select></label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="block"><span class="text-xs text-gray-500">結帳日</span>
+                                <select id="card-edit-billing" class="field-sm">${dayOptions(card.billingDay)}</select></label>
+                            <label class="block"><span class="text-xs text-gray-500">繳款日（扣款日）</span>
+                                <select id="card-edit-payment" class="field-sm">${dayOptions(card.paymentDay)}</select></label>
+                        </div>
+                        <p class="text-[11px] text-gray-400">繳款日比結帳日早（例如 25 日結帳、10 日繳款），會自動當成下個月繳。改名稱時，這張卡過去的紀錄會一起改名。</p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button type="button" onclick="toggleCardEdit(${index})" class="btn-ghost !h-10 text-sm">取消</button>
+                            <button type="button" onclick="saveCardEdit(${index})" class="btn-accent !h-10 text-sm"><i class="fas fa-check"></i>儲存</button>
+                        </div>
+                    </div>`;
+                }
+                return `
                     <div class="flex justify-between items-center gap-2 p-3 bg-white border border-line rounded-xl">
                         <div class="text-sm min-w-0">
-                            <span class="font-bold text-primary block truncate">${card.name}</span>
-                            <span class="text-xs text-gray-400 block truncate">扣款：${card.linkedAccount}</span>
+                            <span class="font-bold text-primary block truncate">${escapeHtml(card.name)}</span>
+                            <span class="text-xs text-gray-400 block truncate">扣款：${escapeHtml(card.linkedAccount)}</span>
                             <span class="flex gap-1 mt-1">
                                 <span class="chip bg-secondary text-gray-600">結帳 ${card.billingDay} 日</span>
-                                <span class="chip bg-secondary text-gray-600">繳款 ${card.paymentDay} 日</span>
+                                <span class="chip bg-secondary text-gray-600">繳款 ${parseInt(card.paymentDay) <= parseInt(card.billingDay) ? '次月 ' : ''}${card.paymentDay} 日</span>
                             </span>
                         </div>
-                        <button onclick="deleteCard(${index})" class="icon-btn shrink-0 hover:!text-red-600 hover:!bg-red-50" title="刪除卡片">
-                            <i class="fas fa-trash-alt text-sm"></i>
-                        </button>
-                    </div>
-                `;
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button onclick="toggleCardEdit(${index})" class="h-8 px-2.5 rounded-lg text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 transition" title="修改卡片"><i class="fas fa-pen mr-1"></i>修改</button>
+                            <button onclick="deleteCard(${index})" class="icon-btn hover:!text-red-600 hover:!bg-red-50" title="刪除卡片"><i class="fas fa-trash-alt text-sm"></i></button>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        function renameCardEverywhere(oldName, newName) {
+            appData.transactions.forEach(t => {
+                if (t.account === oldName) t.account = newName;
+                if (t.toAccount === oldName) t.toAccount = newName;
+                if (t.name === `繳信用卡費-${oldName}`) t.name = `繳信用卡費-${newName}`;
             });
+            (appData.paidBills || []).forEach(b => {
+                if (b.cardName !== oldName) return;
+                b.cardName = newName;
+                if (typeof b.id === 'string' && b.id.startsWith(`pb-${oldName}-`)) b.id = `pb-${newName}-` + b.id.slice(`pb-${oldName}-`.length);
+            });
+            Object.keys(appData.inboxCardMap || {}).forEach(k => { if (appData.inboxCardMap[k] === oldName) appData.inboxCardMap[k] = newName; });
+            (appData.pendingInbox || []).forEach(it => { if (it.account === oldName) it.account = newName; });
+            (appData.recurring || []).forEach(r => {
+                if (r.account === oldName) r.account = newName;
+                if (r.toAccount === oldName) r.toAccount = newName;
+            });
+            try {
+                const d = JSON.parse(localStorage.getItem(BATCH_DRAFT_KEY) || 'null');
+                if (d) {
+                    if (d.account === oldName) d.account = newName;
+                    Object.keys(d.billAmounts || {}).forEach(k => {
+                        const [n, mo] = k.split('|');
+                        if (n === oldName) { d.billAmounts[`${newName}|${mo}`] = d.billAmounts[k]; delete d.billAmounts[k]; }
+                    });
+                    localStorage.setItem(BATCH_DRAFT_KEY, JSON.stringify(d));
+                }
+            } catch (e) {}
+        }
+
+        function saveCardEdit(index) {
+            const card = appData.creditCards[index];
+            if (!card) return;
+            const name = document.getElementById('card-edit-name').value.trim();
+            const linkedAccount = document.getElementById('card-edit-linked').value;
+            const billingDay = parseInt(document.getElementById('card-edit-billing').value);
+            const paymentDay = parseInt(document.getElementById('card-edit-payment').value);
+            if (!name) { showAlert('warning', '請輸入卡片名稱'); return; }
+            if (name !== card.name && (appData.creditCards.some(c => c.name === name) || getAccountByName(name))) {
+                showAlert('warning', '已經有同名的卡片或帳戶'); return;
+            }
+            if (!(billingDay >= 1 && billingDay <= 31) || !(paymentDay >= 1 && paymentDay <= 31)) { showAlert('warning', '請選擇日期'); return; }
+            migratePaidBills();
+            const oldName = card.name;
+            if (name !== oldName) renameCardEverywhere(oldName, name);
+            Object.assign(card, { name, linkedAccount, billingDay, paymentDay });
+            editingCardIdx = -1;
+            applyTransactionsToAssets();
+            saveData();
+            renderSettingsCards();
+            refreshAllViews();
+            renderBookkeepingFormOptions();
+            if (typeof renderBatch === 'function') renderBatch();
+            showAlert('success', `已更新「${name}」`);
         }
 
         function populateAccountDropdowns() {
@@ -5189,9 +5299,10 @@ function testRun() {
             appData.creditCards.forEach(card => {
                 let stmtDate = new Date(currentYear, currentMonth, card.billingDay, 23, 59, 59);
                 let startDate = new Date(currentYear, currentMonth - 1, card.billingDay + 1, 0, 0, 0);
-                let payDate = new Date(currentYear, currentMonth, card.paymentDay);
-                const billId = `pb-${card.name}-${payDate.getTime()}`;
-                const paidSum = (appData.paidBills || []).filter(b => b.id === billId)
+                let payDate = cardPayDate(card, currentYear, currentMonth);
+                const stmtKey = ymKey(currentYear, currentMonth);
+                const billId = `pb-${card.name}-${stmtKey}`;
+                const paidSum = (appData.paidBills || []).filter(b => b.cardName === card.name && b.stmt === stmtKey)
                     .reduce((sum, b) => sum + (b.amount == null ? Infinity : (parseFloat(b.amount) || 0)), 0);
 
                 let cardTotal = 0;
@@ -5211,7 +5322,7 @@ function testRun() {
                     const isPaid = paidSum > 0 && paidSum >= cardTotal - 0.5;
                     const remaining = isPaid ? 0 : Math.max(0, Math.round((cardTotal - paidSum) * 100) / 100);
                     if (!accountGroups[card.linkedAccount]) {
-                        accountGroups[card.linkedAccount] = { total: 0, cards: [], paymentDay: card.paymentDay, isFullyPaid: true };
+                        accountGroups[card.linkedAccount] = { total: 0, cards: [], paymentDay: card.paymentDay, payDate, isFullyPaid: true };
                     }
                     if (!isPaid) {
                         accountGroups[card.linkedAccount].total += remaining;
@@ -5246,7 +5357,7 @@ function testRun() {
             }
 
             for (const [accountName, group] of Object.entries(accountGroups)) {
-                let payDate = new Date(currentYear, currentMonth, group.paymentDay);
+                let payDate = group.payDate;
                 let payDateStr = `${payDate.getMonth()+1}/${payDate.getDate()}`;
 
                 const cardsHtml = group.cards.map(c => {
@@ -6661,7 +6772,8 @@ function testRun() {
             const ctxYearly = document.getElementById('yearly-pie-chart');
             if (!ctxMonthly || !ctxYearly || typeof Chart === 'undefined') return;
 
-            const { startDate: mStart, endDate: mEnd } = getCurrentFinancialMonthRange();
+            const { startDate: mStart, endDate: mEnd } = getPieRange();
+            renderPieRangeControl(mStart, mEnd);
             const currentYear = new Date().getFullYear();
             const monthlyCategories = {};
             const yearlyCategories = {};
@@ -6750,6 +6862,36 @@ function testRun() {
             } else {
                 goalStatusEl.innerHTML = `<p class="text-sm text-gray-500 mt-3">🎉 恭喜您！已達成目標！</p><p class="text-3xl font-bold text-green-700 my-2 tracking-wide tabular-nums">超額達成 ${formatCurrency(Math.abs(difference), 'TWD')}</p><p class="text-sm text-gray-500">繼續保持，設定下一個里程碑！</p>`;
             }
+        }
+
+        // 圓餅圖可以用自己的區間（0 = 跟著統計結算日）
+        function getPieDay() {
+            const d = parseInt(appData.pieStartDay);
+            return d >= 1 && d <= 28 ? d : getStatsDay();
+        }
+        function getPieRange() {
+            const D = getPieDay();
+            const now = new Date();
+            let y = now.getFullYear(), m = now.getMonth();
+            if (now.getDate() < D) m -= 1;
+            return { startDate: new Date(y, m, D), endDate: new Date(y, m + 1, D - 1, 23, 59, 59) };
+        }
+        function renderPieRangeControl(start, end) {
+            const sel = document.getElementById('pie-day-select');
+            const label = document.getElementById('pie-range-label');
+            if (label) label.textContent = `${start.getMonth() + 1}/${start.getDate()} ~ ${end.getMonth() + 1}/${end.getDate()}`;
+            if (!sel) return;
+            const cur = parseInt(appData.pieStartDay) || 0;
+            let h = `<option value="0" ${cur === 0 ? 'selected' : ''}>同統計結算日（${getStatsDay()} 號）</option>`;
+            for (let d = 1; d <= 28; d++) {
+                h += `<option value="${d}" ${cur === d ? 'selected' : ''}>${d === 1 ? '1 號～月底' : `${d} 號～下月 ${d - 1} 號`}</option>`;
+            }
+            sel.innerHTML = h;
+        }
+        function setPieDay(v) {
+            appData.pieStartDay = parseInt(v) || 0;
+            saveData();
+            renderExpensePieCharts();
         }
 
         function getCurrentFinancialMonthRange() {
