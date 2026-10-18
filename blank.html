@@ -336,7 +336,7 @@
                     <div id="bill-due-content" class="hidden px-4 pb-4 border-t border-line pt-3">
                         <div class="flex items-center justify-between gap-2 mb-3">
                             <span class="text-xs text-gray-500">帳單月份</span>
-                            <select id="bill-month-select" class="field-sm max-w-[160px]" onchange="renderMonthlyBillDue()"></select>
+                            <select id="bill-month-select" class="field-sm max-w-[190px]" onchange="renderMonthlyBillDue()"></select>
                         </div>
                         <div id="bill-due-list" class="space-y-3"></div>
                     </div>
@@ -3114,7 +3114,8 @@ function testRun() {
         // 繳款日：繳款日比結帳日早（例如 25 號結帳、10 號繳款）就是下個月繳
         function cardPayDate(card, y, m) {
             const pd = parseInt(card.paymentDay) || 1, bd = parseInt(card.billingDay) || 1;
-            return new Date(y, pd <= bd ? m + 1 : m, pd);
+            const mm = pd <= bd ? m + 1 : m;
+            return new Date(y, mm, Math.min(pd, daysInMonth(y, mm)));
         }
         // 舊的已繳紀錄（編號裡是繳款日的時間）補上帳單月份
         function migratePaidBills() {
@@ -5259,142 +5260,138 @@ function testRun() {
             }
         }
 
+        // 某張卡「在 cy 年 cm 月結帳」的那一期帳單（cm: 0-11）
+        function cardStatement(card, cy, cm, now) {
+            const bd = parseInt(card.billingDay) || 1;
+            const closeDay = Math.min(bd, daysInMonth(cy, cm));
+            const stmtDate = new Date(cy, cm, closeDay, 23, 59, 59);
+            const prevClose = new Date(cy, cm - 1, Math.min(bd, daysInMonth(cy, cm - 1)), 23, 59, 59);
+            const startDate = new Date(prevClose.getTime() + 1000);
+            const key = ymKey(cy, cm);
+            let amount = 0;
+            appData.transactions.forEach(t => {
+                if (t.account !== card.name) return;
+                const eff = new Date(t.timestamp);
+                if (t.isNextCycle) eff.setMonth(eff.getMonth() + 1);
+                if (eff >= startDate && eff <= stmtDate) {
+                    const v = txToTWD(t);
+                    if (t.type === 'expense') amount += v;
+                    else if (t.type === 'income') amount -= v;
+                }
+            });
+            const paidSum = (appData.paidBills || []).filter(b => b.cardName === card.name && b.stmt === key)
+                .reduce((sum, b) => sum + (b.amount == null ? Infinity : (parseFloat(b.amount) || 0)), 0);
+            const isPaid = amount > 0 && paidSum > 0 && paidSum >= amount - 0.5;
+            return {
+                card, key, startDate, stmtDate, payDate: cardPayDate(card, cy, cm),
+                closed: stmtDate.getTime() < (now || new Date()).getTime(),
+                amount, paid: isFinite(paidSum) ? paidSum : amount, isPaid,
+                remaining: isPaid ? 0 : Math.max(0, Math.round((amount - paidSum) * 100) / 100),
+                billId: `pb-${card.name}-${key}`
+            };
+        }
+
+        // 「目前要繳」：每張卡最近一期「已經結帳」的帳單（還沒結帳的在下月卡費預備金）
+        function currentStatements(now) {
+            return appData.creditCards.map(card => {
+                let st = cardStatement(card, now.getFullYear(), now.getMonth(), now);
+                if (!st.closed) st = cardStatement(card, now.getFullYear(), now.getMonth() - 1, now);
+                return st;
+            });
+        }
+
         function renderMonthlyBillDue() {
             const container = document.getElementById('bill-due-list');
             const monthSelect = document.getElementById('bill-month-select');
             const badge = document.getElementById('bill-due-badge');
             if (!container) return;
-
             const now = new Date();
-            let currentYear = now.getFullYear();
-            let currentMonth = now.getMonth();
+            const md = d => `${d.getMonth() + 1}/${d.getDate()}`;
 
-            if (monthSelect) {
-                if (monthSelect.options.length === 0) {
-                    for (let i = 0; i < 12; i++) {
-                        let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                        monthSelect.add(new Option(`${d.getFullYear()}年${d.getMonth() + 1}月`, `${d.getFullYear()}-${d.getMonth()}`));
-                    }
+            if (monthSelect && !monthSelect.dataset.v2) {
+                // 帳單月份 = 消費週期開始的月份（例如 9/21～10/20 算 9 月帳單）
+                monthSelect.innerHTML = '';
+                monthSelect.add(new Option('目前要繳（已出帳）', 'now'));
+                for (let i = 0; i < 12; i++) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    monthSelect.add(new Option(`${d.getFullYear()}年${d.getMonth() + 1}月帳單`, `${d.getFullYear()}-${d.getMonth()}`));
                 }
-                if (monthSelect.value) {
-                    const parts = monthSelect.value.split('-');
-                    currentYear = parseInt(parts[0]);
-                    currentMonth = parseInt(parts[1]);
-                }
+                monthSelect.dataset.v2 = '1';
+            }
+            const mode = monthSelect && monthSelect.value ? monthSelect.value : 'now';
+
+            // 標題徽章永遠顯示「目前要繳」
+            const cur = currentStatements(now).filter(st => st.amount > 0.5);
+            const curUnpaid = cur.filter(st => !st.isPaid).reduce((s, st) => s + st.remaining, 0);
+            if (badge) {
+                if (!cur.length) { badge.className = 'chip bg-gray-100 text-gray-500 mt-0.5'; badge.textContent = '目前沒有帳單'; }
+                else if (curUnpaid > 0) { badge.className = 'chip bg-red-50 text-red-600 mt-0.5'; badge.textContent = `待繳 TWD ${formatCurrency(curUnpaid, 'TWD')}`; }
+                else { badge.className = 'chip bg-green-50 text-green-700 mt-0.5'; badge.innerHTML = '<i class="fas fa-check"></i>已全部繳清'; }
             }
 
-            container.innerHTML = '';
-            let titleStr = '';
-            if (currentYear === now.getFullYear() && currentMonth === now.getMonth()) {
-                titleStr = `今日：${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getDate().toString().padStart(2, '0')}`;
+            let list, title;
+            if (mode === 'now') {
+                list = cur;
+                title = `今日：${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
             } else {
-                titleStr = `${currentYear}年${currentMonth+1}月 帳單`;
+                const [y, m] = mode.split('-').map(Number);
+                list = appData.creditCards.map(card => cardStatement(card, y, m + 1, now)).filter(st => st.amount > 0.5);
+                title = `${y}年${m + 1}月帳單`;
             }
-            const headerDiv = document.createElement('div');
-            headerDiv.className = "text-xs text-right text-gray-400";
-            headerDiv.innerText = titleStr;
-            container.appendChild(headerDiv);
 
-            const accountGroups = {};
-            appData.creditCards.forEach(card => {
-                let stmtDate = new Date(currentYear, currentMonth, card.billingDay, 23, 59, 59);
-                let startDate = new Date(currentYear, currentMonth - 1, card.billingDay + 1, 0, 0, 0);
-                let payDate = cardPayDate(card, currentYear, currentMonth);
-                const stmtKey = ymKey(currentYear, currentMonth);
-                const billId = `pb-${card.name}-${stmtKey}`;
-                const paidSum = (appData.paidBills || []).filter(b => b.cardName === card.name && b.stmt === stmtKey)
-                    .reduce((sum, b) => sum + (b.amount == null ? Infinity : (parseFloat(b.amount) || 0)), 0);
-
-                let cardTotal = 0;
-                appData.transactions.forEach(t => {
-                    if (t.account === card.name) {
-                        let effectiveDate = new Date(t.timestamp);
-                        if (t.isNextCycle) effectiveDate.setMonth(effectiveDate.getMonth() + 1);
-                        if (effectiveDate >= startDate && effectiveDate <= stmtDate) {
-                            const val = txToTWD(t);
-                            if (t.type === 'expense') cardTotal += val;
-                            else if (t.type === 'income') cardTotal -= val;
-                        }
-                    }
-                });
-
-                if (cardTotal > 0) {
-                    const isPaid = paidSum > 0 && paidSum >= cardTotal - 0.5;
-                    const remaining = isPaid ? 0 : Math.max(0, Math.round((cardTotal - paidSum) * 100) / 100);
-                    if (!accountGroups[card.linkedAccount]) {
-                        accountGroups[card.linkedAccount] = { total: 0, cards: [], paymentDay: card.paymentDay, payDate, isFullyPaid: true };
-                    }
-                    if (!isPaid) {
-                        accountGroups[card.linkedAccount].total += remaining;
-                        accountGroups[card.linkedAccount].isFullyPaid = false;
-                    }
-                    accountGroups[card.linkedAccount].cards.push({
-                        name: card.name, amount: cardTotal, paid: isFinite(paidSum) ? paidSum : cardTotal, remaining,
-                        isPaid: isPaid, billId: billId, linkedAccount: card.linkedAccount
-                    });
-                }
+            const groups = {};
+            list.forEach(st => {
+                const acc = st.card.linkedAccount;
+                if (!groups[acc]) groups[acc] = { items: [], total: 0 };
+                groups[acc].items.push(st);
+                if (st.closed && !st.isPaid) groups[acc].total += st.remaining;
             });
 
-            // 標題徽章：顯示本期待繳狀態
-            const groupList = Object.values(accountGroups);
-            const unpaidTotal = groupList.reduce((s, g) => s + g.total, 0);
-            if (badge) {
-                if (groupList.length === 0) {
-                    badge.className = 'chip bg-gray-100 text-gray-500 mt-0.5';
-                    badge.textContent = '本期無帳單';
-                } else if (unpaidTotal > 0) {
-                    badge.className = 'chip bg-red-50 text-red-600 mt-0.5';
-                    badge.textContent = `待繳 TWD ${formatCurrency(unpaidTotal, 'TWD')}`;
-                } else {
-                    badge.className = 'chip bg-green-50 text-green-700 mt-0.5';
-                    badge.innerHTML = '<i class="fas fa-check"></i>已全部繳清';
-                }
+            let html = `<div class="text-xs text-right text-gray-400">${title}</div>`;
+            if (!list.length) {
+                html += `<p class="text-center text-gray-400 text-sm py-4">${mode === 'now' ? '目前沒有已出帳的帳單' : '該月沒有帳單'}</p>`;
             }
-
-            if (groupList.length === 0) {
-                container.innerHTML += '<p class="text-center text-gray-400 text-sm py-4">該月尚無應繳帳單</p>';
-                return;
-            }
-
-            for (const [accountName, group] of Object.entries(accountGroups)) {
-                let payDate = group.payDate;
-                let payDateStr = `${payDate.getMonth()+1}/${payDate.getDate()}`;
-
-                const cardsHtml = group.cards.map(c => {
-                    let actionHtml = '';
-                    if (c.isPaid) {
-                        actionHtml = '<span class="chip bg-green-50 text-green-700"><i class="fas fa-check"></i>已繳款</span>';
-                    } else {
-                        actionHtml = `<button onclick="confirmPayBill('${c.billId}', '${c.name}', ${c.remaining}, '${c.linkedAccount}')" class="h-7 px-3 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition">${c.paid > 0 ? '繳餘額' : '繳款'}</button>`;
-                    }
-                    const partialHtml = (!c.isPaid && c.paid > 0)
-                        ? `<p class="text-[11px] text-amber-700">已繳 ${formatCurrency(c.paid, 'TWD')}，尚餘 <b>${formatCurrency(c.remaining, 'TWD')}</b></p>` : '';
+            for (const [accountName, g] of Object.entries(groups)) {
+                const unpaid = g.items.filter(st => st.closed && !st.isPaid).sort((a, b) => a.payDate - b.payDate);
+                const due = (unpaid[0] || g.items[0]).payDate;
+                const allDone = g.items.every(st => st.isPaid || !st.closed);
+                const rows = g.items.map(st => {
+                    let action;
+                    if (!st.closed) action = `<span class="chip bg-gray-100 text-gray-500">${md(st.stmtDate)} 結帳</span>`;
+                    else if (st.isPaid) action = '<span class="chip bg-green-50 text-green-700"><i class="fas fa-check"></i>已繳款</span>';
+                    else action = `<button onclick="confirmPayBill(this.dataset.bill, this.dataset.card, ${st.remaining}, this.dataset.acc)" data-bill="${escapeHtml(st.billId)}" data-card="${escapeHtml(st.card.name)}" data-acc="${escapeHtml(accountName)}" class="h-7 px-3 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition">${st.paid > 0 ? '繳餘額' : '繳款'}</button>`;
+                    const partial = (st.closed && !st.isPaid && st.paid > 0)
+                        ? `<p class="text-[11px] text-amber-700">已繳 ${formatCurrency(st.paid, 'TWD')}，尚餘 <b>${formatCurrency(st.remaining, 'TWD')}</b></p>` : '';
+                    const sub = st.closed ? `${md(st.startDate)}～${md(st.stmtDate)} · ${md(st.payDate)} 前繳` : `${md(st.startDate)}～${md(st.stmtDate)} · 尚未出帳`;
                     return `<div class="flex justify-between items-center gap-2 py-2">
                         <div class="min-w-0">
-                            <p class="text-sm text-gray-700 truncate">${c.name}</p>
-                            <p class="text-sm tabular-nums ${c.isPaid ? 'line-through text-gray-400' : 'font-bold text-primary'}">$${formatCurrency(c.amount, 'TWD')}</p>
-                            ${partialHtml}
+                            <p class="text-sm text-gray-700 truncate">${escapeHtml(st.card.name)}</p>
+                            <p class="text-[11px] text-gray-400 tabular-nums">${sub}</p>
+                            <p class="text-sm tabular-nums ${st.isPaid ? 'line-through text-gray-400' : (st.closed ? 'font-bold text-primary' : 'text-gray-500')}">$${formatCurrency(st.amount, 'TWD')}</p>
+                            ${partial}
                         </div>
-                        <div class="shrink-0">${actionHtml}</div>
+                        <div class="shrink-0">${action}</div>
                     </div>`;
                 }).join('');
-
-                container.innerHTML += `
+                html += `
                     <div class="rounded-xl border border-line overflow-hidden">
                         <div class="flex justify-between items-center gap-3 p-3 bg-secondary/60">
                             <div class="min-w-0">
-                                <span class="font-bold text-primary block truncate">${accountName}</span>
-                                <span class="text-xs text-gray-500"><i class="far fa-calendar mr-1"></i>繳款期限 ${payDateStr}</span>
+                                <span class="font-bold text-primary block truncate">${escapeHtml(accountName)}</span>
+                                <span class="text-xs text-gray-500"><i class="far fa-calendar mr-1"></i>繳款期限 ${md(due)}</span>
                             </div>
                             <div class="text-right shrink-0">
                                 <span class="text-[11px] text-gray-500 block">總應繳</span>
-                                <span class="font-bold ${group.isFullyPaid ? 'text-green-600' : 'text-red-600'} tabular-nums">TWD ${formatCurrency(group.total, 'TWD')}</span>
+                                <span class="font-bold ${allDone ? 'text-green-600' : 'text-red-600'} tabular-nums">TWD ${formatCurrency(g.total, 'TWD')}</span>
                             </div>
                         </div>
-                        <div class="px-3 divide-y divide-line">${cardsHtml}</div>
-                    </div>
-                `;
+                        <div class="px-3 divide-y divide-line">${rows}</div>
+                    </div>`;
             }
+            html += `<p class="text-[11px] text-gray-400">${mode === 'now'
+                ? '只列出已經結帳的帳單；還沒結帳的消費請看下方「下月卡費預備金監控」。'
+                : '帳單月份以消費週期開始的月份計算，例如 9/21～10/20 的消費算 9 月帳單。'}</p>`;
+            container.innerHTML = html;
         }
 
         // --- Tab 3: 記帳 ---
