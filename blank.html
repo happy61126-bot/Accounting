@@ -348,8 +348,8 @@
                         <div class="flex items-center gap-3 min-w-0">
                             <span class="w-9 h-9 rounded-xl bg-accent/10 text-accent grid place-items-center shrink-0"><i class="fas fa-credit-card"></i></span>
                             <div class="min-w-0">
-                                <h3 class="font-bold text-primary">下月卡費預備金監控</h3>
-                                <span class="chip bg-gray-100 text-gray-500 mt-0.5">依帳單週期計算</span>
+                                <h3 class="font-bold text-primary">本期刷卡與卡費準備</h3>
+                                <span id="prep-badge" class="chip bg-gray-100 text-gray-500 mt-0.5">計算中</span>
                             </div>
                         </div>
                         <i class="fas fa-chevron-down text-sm text-gray-400 transition-transform duration-300" id="credit-card-prep-content-icon"></i>
@@ -2153,6 +2153,9 @@ function testRun() {
 
         const INITIAL_STOCKS = [];
 
+        // false = 不顯示「共同帳戶」分頁，選單裡也不會出現共同帳戶
+        const SHOW_JOINT_TAB = true;
+        function jointList() { return SHOW_JOINT_TAB ? [appData.jointAccount] : []; }
         const JOINT_ACCOUNT_INITIAL = { id: 'joint-0', name: "共同帳戶", amount: 0, currency: "TWD", type: "joint", category: "共同帳戶" };
 
         const FIXED_EXPENSES_DEFAULT = [];
@@ -2288,7 +2291,7 @@ function testRun() {
         }
 
         function getAccountByName(accountName) {
-            const allAccounts = [...appData.assets, appData.jointAccount];
+            const allAccounts = [...appData.assets, ...jointList()];
             let account = allAccounts.find(a => a.name === accountName);
             if (!account) {
                 const creditCard = appData.creditCards.find(c => c.name === accountName);
@@ -2560,7 +2563,7 @@ function testRun() {
         function applyTransactionsToAssets() {
             appData.assets = JSON.parse(JSON.stringify(appData.accounts));
             appData.jointAccount = JSON.parse(JSON.stringify(JOINT_ACCOUNT_INITIAL));
-            const allAccountsTemp = [...appData.assets, appData.jointAccount];
+            const allAccountsTemp = [...appData.assets, ...jointList()];
 
             appData.transactions.forEach(t => {
                 const account = allAccountsTemp.find(a => a.name === t.account);
@@ -2758,6 +2761,7 @@ function testRun() {
             saveData();
             renderAssets();
             renderMonthlyBillDue();
+            renderCreditCardPrep();
             renderTransactionHistory();
             showAlert('success', '繳款成功！資產已更新。');
         }
@@ -3607,7 +3611,7 @@ function testRun() {
         }
 
         function allPayMethods() {
-            return [...appData.assets.map(a => a.name), appData.jointAccount.name, ...appData.creditCards.map(c => c.name)];
+            return [...appData.assets.map(a => a.name), ...jointList().map(a => a.name), ...appData.creditCards.map(c => c.name)];
         }
 
         function normalizeName(s) {
@@ -4798,7 +4802,7 @@ function testRun() {
             const accCount = {};
             appData.transactions.forEach(t => { if (t.timestamp >= since && t.type === 'expense') accCount[t.account] = (accCount[t.account] || 0) + 1; });
             const cards = appData.creditCards.map(c => c.name);
-            const accounts = [...appData.accounts.filter(a => a.type !== 'investment').map(a => a.name), appData.jointAccount.name];
+            const accounts = [...appData.accounts.filter(a => a.type !== 'investment').map(a => a.name), ...jointList().map(a => a.name)];
             const defaultAccount = Object.entries(accCount).sort((a, b) => b[1] - a[1]).map(([a]) => a).find(a => cards.includes(a) || accounts.includes(a)) || cards[0] || accounts[0] || '';
             return {
                 v: 1,
@@ -5389,7 +5393,7 @@ function testRun() {
                     </div>`;
             }
             html += `<p class="text-[11px] text-gray-400">${mode === 'now'
-                ? '只列出已經結帳的帳單；還沒結帳的消費請看下方「下月卡費預備金監控」。'
+                ? '只列出已經結帳的帳單；還沒結帳的消費請看下方「本期刷卡與卡費準備」。'
                 : '帳單月份以消費週期開始的月份計算，例如 9/21～10/20 的消費算 9 月帳單。'}</p>`;
             container.innerHTML = html;
         }
@@ -5400,7 +5404,7 @@ function testRun() {
             select.innerHTML = '<option value="" disabled selected>選擇帳戶/卡片</option>';
             const groupAccounts = document.createElement('optgroup');
             groupAccounts.label = "帳戶";
-            const allAccounts = [...appData.assets, appData.jointAccount];
+            const allAccounts = [...appData.assets, ...jointList()];
             allAccounts.forEach(asset => {
                 const option = document.createElement('option');
                 option.value = asset.name;
@@ -5559,7 +5563,7 @@ function testRun() {
                 categorySelect.options[0].disabled = true;
                 subcategorySelect.appendChild(new Option("選擇轉入帳號", "", true, true));
                 subcategorySelect.options[0].disabled = true;
-                const allAccounts = [...appData.assets, appData.jointAccount];
+                const allAccounts = [...appData.assets, ...jointList()];
                 allAccounts.forEach(asset => {
                     const displayText = `${asset.name} (${asset.currency})`;
                     categorySelect.appendChild(new Option(displayText, asset.name));
@@ -5809,7 +5813,7 @@ function testRun() {
             let html = '<option value="" disabled>選擇帳戶 / 卡片</option>';
             html += '<optgroup label="信用卡">' + appData.creditCards.map(c =>
                 `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('') + '</optgroup>';
-            html += '<optgroup label="帳戶">' + [...appData.assets, appData.jointAccount].map(a =>
+            html += '<optgroup label="帳戶">' + [...appData.assets, ...jointList()].map(a =>
                 `<option value="${escapeHtml(a.name)}">${escapeHtml(a.name)} (${a.currency})</option>`).join('') + '</optgroup>';
             sel.innerHTML = html;
             if (batchState.account && getAccountByName(batchState.account)) {
@@ -6372,7 +6376,7 @@ function testRun() {
             accountSelect.innerHTML = '<option value="" disabled>選擇帳戶/卡片</option>';
             const groupAccounts = document.createElement('optgroup');
             groupAccounts.label = "帳戶";
-            [...appData.assets, appData.jointAccount].forEach(a => {
+            [...appData.assets, ...jointList()].forEach(a => {
                 groupAccounts.appendChild(new Option(`${a.name} (${a.currency})`, a.name));
             });
             accountSelect.appendChild(groupAccounts);
@@ -6424,7 +6428,7 @@ function testRun() {
                 INCOME_CATEGORIES_LIST.forEach(c => catSelect.add(new Option(c, c)));
                 subSelect.disabled = true;
             } else if (isTransfer) {
-                [...appData.assets, appData.jointAccount].forEach(a => {
+                [...appData.assets, ...jointList()].forEach(a => {
                     catSelect.add(new Option(`${a.name} (${a.currency})`, a.name));
                     subSelect.add(new Option(`${a.name} (${a.currency})`, a.name));
                 });
@@ -7000,69 +7004,92 @@ function testRun() {
             return { startDate, endDate };
         }
 
+        // 本期刷卡監控：每張卡目前這期（還沒結帳）刷了多少，加上已出帳還沒繳的，
+        // 依扣款帳戶加總，算出每個帳戶、全部帳戶要準備多少錢
         function renderCreditCardPrep() {
             const container = document.getElementById('credit-card-prep-list');
+            const badge = document.getElementById('prep-badge');
             if (!container) return;
-            container.innerHTML = '';
-            const accountMap = {};
+            const now = new Date();
+            const md = d => `${d.getMonth() + 1}/${d.getDate()}`;
+            const groups = {};
+            const ensure = acc => {
+                if (!groups[acc]) {
+                    const info = appData.assets.find(a => a.name === acc) || appData.accounts.find(a => a.name === acc) || { name: acc, amount: 0, currency: 'TWD' };
+                    groups[acc] = { info, rows: [], open: 0, billed: 0 };
+                }
+                return groups[acc];
+            };
+            const billed = currentStatements(now).filter(st => st.closed && !st.isPaid && st.amount > 0.5);
             appData.creditCards.forEach(card => {
-                if (!accountMap[card.linkedAccount]) {
-                    const assetInfo = appData.assets.find(a => a.name === card.linkedAccount) || { name: card.linkedAccount, amount: 0, currency: 'TWD' };
-                    accountMap[card.linkedAccount] = { info: assetInfo, cards: [], totalCardExpense: 0 };
-                }
-                const { startDate, endDate } = getCardCycle(card.billingDay);
-                accountMap[card.linkedAccount].cards.push({ ...card, cycleStart: startDate, cycleEnd: endDate, amount: 0 });
+                let st = cardStatement(card, now.getFullYear(), now.getMonth(), now);
+                if (st.closed) st = cardStatement(card, now.getFullYear(), now.getMonth() + 1, now);
+                const g = ensure(card.linkedAccount);
+                const unpaid = billed.find(b => b.card.name === card.name);
+                g.rows.push({ st, unpaid });
+                g.open += Math.max(0, st.amount);
+                if (unpaid) g.billed += unpaid.remaining;
             });
-            appData.transactions.forEach(t => {
-                if (t.type !== 'expense' && t.type !== 'income') return;
-                let effectiveDate = new Date(t.timestamp);
-                if (t.isNextCycle) { effectiveDate.setMonth(effectiveDate.getMonth() + 1); }
-                for (const accName in accountMap) {
-                    const group = accountMap[accName];
-                    const matchedCardData = group.cards.find(c => c.name === t.account);
-                    if (matchedCardData && effectiveDate >= matchedCardData.cycleStart && effectiveDate <= matchedCardData.cycleEnd) {
-                        const val = txToTWD(t);
-                        if (t.type === 'expense') {
-                            group.totalCardExpense += val;
-                            matchedCardData.amount += val;
-                        } else if (t.type === 'income') {
-                            group.totalCardExpense -= val;
-                            matchedCardData.amount -= val;
-                        }
-                        break;
-                    }
-                }
-            });
-            if (Object.keys(accountMap).length === 0) { container.innerHTML = '<p class="text-gray-400 text-center text-sm py-4">尚無信用卡設定。</p>'; return; }
-            for (const accName in accountMap) {
-                const group = accountMap[accName];
-                const accountBalance = convertToTWD(group.info.amount, group.info.currency);
-                const remaining = accountBalance - group.totalCardExpense;
-                const isDanger = remaining < 0;
-                const cardDetailsHtml = group.cards.map(c => `
-                    <div class="flex justify-between items-center gap-2 text-xs py-1.5">
-                        <div class="min-w-0">
-                            <p class="text-gray-700 truncate">${c.name}</p>
-                            <p class="text-[10px] text-gray-400">週期 ${c.cycleStart.getMonth()+1}/${c.cycleStart.getDate()} ~ ${c.cycleEnd.getMonth()+1}/${c.cycleEnd.getDate()}</p>
+            if (!appData.creditCards.length) {
+                container.innerHTML = '<p class="text-gray-400 text-center text-sm py-4">尚無信用卡設定。</p>';
+                if (badge) { badge.className = 'chip bg-gray-100 text-gray-500 mt-0.5'; badge.textContent = '尚無信用卡'; }
+                return;
+            }
+            const list = Object.values(groups);
+            const grandOpen = list.reduce((s, g) => s + g.open, 0);
+            const grandBilled = list.reduce((s, g) => s + g.billed, 0);
+            const grandNeed = grandOpen + grandBilled;
+            const grandBal = list.reduce((s, g) => s + convertToTWD(g.info.amount, g.info.currency), 0);
+            const short = list.filter(g => convertToTWD(g.info.amount, g.info.currency) - g.open - g.billed < 0).length;
+            if (badge) {
+                badge.className = `chip ${short ? 'bg-red-50 text-red-600' : 'bg-accent/10 text-accent'} mt-0.5`;
+                badge.textContent = `全部要準備 TWD ${formatCurrency(grandNeed, 'TWD')}${short ? `・${short} 個帳戶不足` : ''}`;
+            }
+            let html = `
+                <div class="rounded-xl bg-primary text-white p-3">
+                    <p class="text-xs opacity-75">全部帳戶要準備的卡費</p>
+                    <p class="text-2xl font-bold tabular-nums">TWD ${formatCurrency(grandNeed, 'TWD')}</p>
+                    <div class="grid grid-cols-2 gap-2 mt-2 text-[11px] tabular-nums">
+                        <div class="rounded-lg bg-white/10 px-2 py-1.5"><span class="opacity-75 block">本期刷卡（未結帳）</span><b class="text-sm">${formatCurrency(grandOpen, 'TWD')}</b></div>
+                        <div class="rounded-lg bg-white/10 px-2 py-1.5"><span class="opacity-75 block">已出帳還沒繳</span><b class="text-sm">${formatCurrency(grandBilled, 'TWD')}</b></div>
+                    </div>
+                    <p class="text-[11px] opacity-75 mt-2 tabular-nums">扣款帳戶餘額合計 ${formatCurrency(grandBal, 'TWD')}，扣完剩 <b class="${grandBal - grandNeed < 0 ? 'text-red-300' : ''}">${formatCurrency(grandBal - grandNeed, 'TWD')}</b></p>
+                </div>`;
+            for (const [accName, g] of Object.entries(groups)) {
+                const bal = convertToTWD(g.info.amount, g.info.currency);
+                const need = g.open + g.billed;
+                const remaining = bal - need;
+                const danger = remaining < 0;
+                const rows = g.rows.map(({ st, unpaid }) => `
+                    <div class="py-2">
+                        <div class="flex justify-between items-center gap-2 text-sm">
+                            <span class="text-gray-700 truncate">${escapeHtml(st.card.name)}</span>
+                            <span class="tabular-nums font-bold text-primary shrink-0">${formatCurrency(Math.max(0, st.amount), 'TWD')}</span>
                         </div>
-                        <span class="tabular-nums text-gray-700 shrink-0">$${formatCurrency(c.amount, 'TWD')}</span>
+                        <p class="text-[11px] text-gray-400 tabular-nums">本期 ${md(st.startDate)}～${md(st.stmtDate)} · ${md(st.stmtDate)} 結帳 · ${md(st.payDate)} 繳</p>
+                        ${unpaid ? `<p class="text-[11px] text-red-600 tabular-nums">＋上期已出帳未繳 ${formatCurrency(unpaid.remaining, 'TWD')}（${md(unpaid.payDate)} 前繳）</p>` : ''}
                     </div>`).join('');
-                container.innerHTML += `
-                    <div class="rounded-xl border ${isDanger ? 'border-red-200' : 'border-line'} overflow-hidden">
-                        <div class="flex justify-between items-center gap-3 p-3 ${isDanger ? 'bg-red-50' : 'bg-secondary/60'}">
-                            <p class="font-bold text-primary truncate">${accName}</p>
+                html += `
+                    <div class="rounded-xl border ${danger ? 'border-red-200' : 'border-line'} overflow-hidden">
+                        <div class="flex justify-between items-center gap-3 p-3 ${danger ? 'bg-red-50' : 'bg-secondary/60'}">
+                            <div class="min-w-0">
+                                <p class="font-bold text-primary truncate">${escapeHtml(accName)}</p>
+                                <p class="text-xs text-gray-500 mt-0.5">帳戶餘額 <b class="text-lg ${bal < 0 ? 'text-red-600' : 'text-primary'} tabular-nums">${formatCurrency(bal, 'TWD')}</b></p>
+                            </div>
                             <div class="text-right shrink-0">
-                                <p class="text-[11px] text-gray-500">帳戶餘額</p>
-                                <p class="font-medium text-primary tabular-nums">${formatCurrency(accountBalance, 'TWD')}</p>
+                                <p class="text-[11px] text-gray-500">這個帳戶要準備</p>
+                                <p class="font-bold text-red-600 tabular-nums">${formatCurrency(need, 'TWD')}</p>
                             </div>
                         </div>
-                        <div class="px-3 divide-y divide-line">${cardDetailsHtml}</div>
-                        <div class="px-3 py-2.5 border-t border-line space-y-1 text-sm">
-                            <div class="flex justify-between"><span class="text-gray-600">總預計扣款</span><span class="font-bold text-red-600 tabular-nums">${group.totalCardExpense > 0.5 ? '-' : ''}${formatCurrency(Math.abs(group.totalCardExpense) < 0.5 ? 0 : group.totalCardExpense, 'TWD')}</span></div>
-                            <div class="flex justify-between"><span class="text-gray-600">預估剩餘</span><span class="font-bold tabular-nums ${isDanger ? 'text-red-600' : 'text-green-600'}">${formatCurrency(remaining, 'TWD')}${isDanger ? '<i class="fas fa-exclamation-circle ml-1"></i>' : ''}</span></div>
+                        <div class="px-3 divide-y divide-line">${rows}</div>
+                        <div class="px-3 py-2.5 border-t border-line flex justify-between text-sm">
+                            <span class="text-gray-600">扣完卡費剩</span>
+                            <span class="font-bold tabular-nums ${danger ? 'text-red-600' : 'text-green-600'}">${formatCurrency(remaining, 'TWD')}${danger ? `<span class="block text-[11px] font-medium">還差 ${formatCurrency(-remaining, 'TWD')}</span>` : ''}</span>
                         </div>
                     </div>`;
             }
+            html += '<p class="text-[11px] text-gray-400">還沒結帳的金額會隨刷卡變動；結帳後會移到上方「信用卡應繳金額」。</p>';
+            container.innerHTML = html;
         }
 
         // --- 通用確認視窗（取代瀏覽器原生 confirm） ---
@@ -8238,6 +8265,10 @@ function testRun() {
 
         window.onload = function() {
             if (QUICK_MODE) { initQuickMode(); return; }
+            if (!SHOW_JOINT_TAB) {
+                const jb = document.querySelector('.nav-button[data-tab="joint"]');
+                if (jb) { jb.parentElement.classList.replace('grid-cols-5', 'grid-cols-4'); jb.remove(); }
+            }
             loadData();
             runRecurring();
             setupTabs();
