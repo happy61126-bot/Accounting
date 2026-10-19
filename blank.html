@@ -662,7 +662,7 @@
                         </select>
                     </div>
                     <p id="nw-note" class="text-[11px] text-gray-400 mb-2"></p>
-                    <div class="relative w-full" style="height: 240px;"><canvas id="nw-chart"></canvas></div>
+                    <div class="relative w-full" style="height: 280px;"><canvas id="nw-chart"></canvas></div>
                 </div>
             </section>
         </div>
@@ -2155,6 +2155,10 @@ function testRun() {
 
         // false = 不顯示「共同帳戶」分頁，選單裡也不會出現共同帳戶
         const SHOW_JOINT_TAB = true;
+        // true = 資產頁的股票可以點開看最近 5 筆買賣
+        const STOCK_TRADE_HISTORY = false;
+        // true = 理財規劃頁把信用卡兩區放最上面，其他收合
+        const PLAN_CARDS_FIRST = false;
         function jointList() { return SHOW_JOINT_TAB ? [appData.jointAccount] : []; }
         const JOINT_ACCOUNT_INITIAL = { id: 'joint-0', name: "共同帳戶", amount: 0, currency: "TWD", type: "joint", category: "共同帳戶" };
 
@@ -2543,6 +2547,7 @@ function testRun() {
             appData.budgets = (p.budgets && typeof p.budgets === 'object' && !Array.isArray(p.budgets)) ? p.budgets : {};
             appData.budgetAlerted = (p.budgetAlerted && typeof p.budgetAlerted === 'object') ? p.budgetAlerted : null;
             appData.assetHistory = (p.assetHistory && typeof p.assetHistory === 'object' && !Array.isArray(p.assetHistory)) ? p.assetHistory : {};
+            appData.stockHistory = (p.stockHistory && typeof p.stockHistory === 'object' && !Array.isArray(p.stockHistory)) ? p.stockHistory : {};
             appData.priceHistory = (p.priceHistory && typeof p.priceHistory === 'object') ? p.priceHistory : null;
             appData.cloudBackup = !!p.cloudBackup;
             appData.pieStartDay = parseInt(p.pieStartDay) || 0;
@@ -2651,6 +2656,7 @@ function testRun() {
                     budgets: appData.budgets || {},
                     budgetAlerted: appData.budgetAlerted || null,
                     assetHistory: appData.assetHistory || {},
+                    stockHistory: appData.stockHistory || {},
                     priceHistory: appData.priceHistory || null,
                     cloudBackup: !!appData.cloudBackup,
                     pieStartDay: appData.pieStartDay || 0
@@ -5020,10 +5026,10 @@ function testRun() {
                                         const pl = mktVal - costVal;
                                         const plPercent = ((pl / costVal) * 100).toFixed(1);
                                         const plClass = pl >= 0 ? 'text-red-600' : 'text-green-600';
-                                        return `
+                                        const row = `
                                         <div class="px-3 py-2.5 flex justify-between gap-3 text-xs">
                                             <div class="min-w-0">
-                                                <p class="font-bold text-primary text-sm truncate">${s.name}</p>
+                                                <p class="font-bold text-primary text-sm truncate">${STOCK_TRADE_HISTORY ? `<i class="fas fa-chevron-down text-[10px] text-gray-400 mr-1 transition-transform ${openStockIds.has(s.id) ? 'rotate-180' : ''}"></i>` : ''}${s.name}</p>
                                                 <p class="text-gray-400">${s.code} · ${s.shares} 股</p>
                                                 <p class="text-gray-500 mt-0.5 tabular-nums">現價 ${formatCurrency(s.currentPrice, s.currency)} / 成本 ${formatCurrency(s.cost, s.currency)}</p>
                                             </div>
@@ -5033,6 +5039,8 @@ function testRun() {
                                                 <p class="${plClass} font-bold tabular-nums">${pl > 0 ? '+' : ''}${formatCurrency(pl, s.currency)} (${plPercent}%)</p>
                                             </div>
                                         </div>`;
+                                        if (!STOCK_TRADE_HISTORY) return row;
+                                        return `<div><button type="button" class="w-full text-left hover:bg-white/50" onclick="toggleStockTrades('${s.id}')">${row}</button>${openStockIds.has(s.id) ? stockTradesHtml(s) : ''}</div>`;
                                     }).join('')}
                                 </div>
                             `;
@@ -5072,6 +5080,70 @@ function testRun() {
                         </div>
                     </div>
                 `;
+            });
+        }
+
+        // 股票最近買賣紀錄（從「持股」買入／賣出產生的記帳紀錄）
+        const openStockIds = new Set();
+        function toggleStockTrades(id) {
+            if (openStockIds.has(id)) openStockIds.delete(id); else openStockIds.add(id);
+            renderAssets();
+        }
+        function stockTrades(s, n) {
+            return appData.transactions
+                .filter(t => t.name === `買入股票-${s.name}` || t.name === `賣出股票-${s.name}`)
+                .sort((a, b) => b.timestamp - a.timestamp).slice(0, n)
+                .map(t => {
+                    const m = /(買入|賣出)\s+.+?\s+([\d.]+)股\s*@\s*([\d.]+)/.exec(t.note || '');
+                    return { t, buy: t.name.startsWith('買入'), shares: m ? parseFloat(m[2]) : null, price: m ? parseFloat(m[3]) : null };
+                });
+        }
+        function stockTradesHtml(s) {
+            const list = stockTrades(s, 5);
+            const d = ts => { const x = new Date(ts); return `${x.getFullYear()}/${x.getMonth() + 1}/${x.getDate()}`; };
+            const body = list.length ? list.map(r => `
+                <div class="flex items-center justify-between gap-2 py-1.5">
+                    <div class="min-w-0">
+                        <span class="chip ${r.buy ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}">${r.buy ? '買入' : '賣出'}</span>
+                        <span class="text-gray-500 tabular-nums ml-1">${d(r.t.timestamp)}</span>
+                        <p class="text-gray-600 tabular-nums mt-0.5">${r.shares != null ? `${r.shares} 股` : ''}${r.price != null ? ` @ ${formatCurrency(r.price, s.currency)}` : ''}</p>
+                    </div>
+                    <span class="font-bold tabular-nums shrink-0 ${r.buy ? 'text-red-600' : 'text-green-700'}">${r.buy ? '−' : '+'}${formatCurrency(r.t.amount, r.t.currency)} <span class="text-[10px] text-gray-400 font-normal">${r.t.currency}</span></span>
+                </div>`).join('') : '<p class="text-gray-400 py-1.5">還沒有買賣紀錄（在右上角「持股」按買入／賣出才會記錄）</p>';
+            return `<div class="mx-3 mb-2 px-3 py-1 rounded-lg bg-white text-xs divide-y divide-line">
+                <p class="text-[11px] font-bold text-gray-400 py-1.5">最近 ${Math.min(5, list.length) || ''} 筆交易</p>${body}</div>`;
+        }
+
+        // 理財規劃：信用卡兩區放最上面，其他收合
+        function arrangePlanTab() {
+            if (!PLAN_CARDS_FIRST) return;
+            const tab = document.getElementById('plan-tab');
+            if (!tab || document.getElementById('plan-others')) return;
+            const cardOf = id => { const el = document.getElementById(id); return el ? el.closest('.card') : null; };
+            const bill = cardOf('bill-due-content'), prep = cardOf('credit-card-prep-content');
+            const others = [cardOf('monthly-income-input'), cardOf('recurring-list'), cardOf('fluid-expenses-list')].filter(Boolean);
+            const anchor = tab.querySelector('.page-sub');
+            const wrap = document.createElement('div');
+            wrap.className = 'mb-4';
+            wrap.innerHTML = `
+                <button type="button" class="card w-full flex justify-between items-center gap-3 p-4 hover:bg-secondary/60 transition text-left" onclick="toggleAccordion('plan-others')">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <span class="w-9 h-9 rounded-xl bg-secondary text-gray-500 grid place-items-center shrink-0"><i class="fas fa-layer-group"></i></span>
+                        <div class="min-w-0">
+                            <h3 class="font-bold text-primary">其他規劃</h3>
+                            <p class="text-xs text-gray-400 truncate">每月收入與固定支出、每月自動記帳、流動支出</p>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-down text-sm text-gray-400 transition-transform duration-300" id="plan-others-icon"></i>
+                </button>
+                <div id="plan-others" class="hidden mt-4"></div>`;
+            [prep, bill].forEach(c => { if (c) anchor.after(c); });
+            (prep || bill || anchor).after(wrap);
+            const box = wrap.querySelector('#plan-others');
+            others.forEach(c => box.appendChild(c));
+            ['bill-due-content', 'credit-card-prep-content'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.classList.contains('hidden')) toggleAccordion(id);
             });
         }
 
@@ -7742,6 +7814,13 @@ function testRun() {
             if (!appData.assetHistory || typeof appData.assetHistory !== 'object') appData.assetHistory = {};
             const v = Math.round(calculateTotalAsset());
             if (isFinite(v)) appData.assetHistory[nowYm()] = v;
+            if (!appData.stockHistory || typeof appData.stockHistory !== 'object') appData.stockHistory = {};
+            const sv = Math.round(stockValueNow());
+            if (isFinite(sv)) appData.stockHistory[nowYm()] = sv;
+        }
+        // 目前持股市值（台幣）
+        function stockValueNow() {
+            return (appData.stocks || []).reduce((sum, s) => sum + convertToTWD((s.shares || 0) * (s.currentPrice || 0), s.currency), 0);
         }
 
         // 從記帳紀錄的備註「買入 XX 10股 @..」解析股數變化
@@ -7756,7 +7835,7 @@ function testRun() {
             return ev;
         }
 
-        // 回傳 [{ ym, value, est }]，最後一個是目前即時值
+        // 回傳 [{ ym, value, stock, est }]，最後一個是目前即時值；stock = 股票市值
         function netWorthSeries(months) {
             const cur = nowYm();
             const txs = appData.transactions;
@@ -7769,10 +7848,15 @@ function testRun() {
             const events = stockShareEvents();
             const out = [];
             for (let ym = startYm; ym <= cur; ym = ymAdd(ym, 1)) {
-                if (ym === cur) { out.push({ ym, value: calculateTotalAsset(), est: false }); break; }
+                if (ym === cur) { out.push({ ym, value: calculateTotalAsset(), stock: stockValueNow(), est: false }); break; }
                 const snap = appData.assetHistory && appData.assetHistory[ym];
-                if (snap != null && ym !== cur) { out.push({ ym, value: snap, est: false }); continue; }
-                out.push({ ym, value: estimateNetWorthAt(ym, hist, events), est: true });
+                if (snap != null && ym !== cur) {
+                    const ss = appData.stockHistory && appData.stockHistory[ym];
+                    out.push({ ym, value: snap, stock: ss != null ? ss : estimateNetWorthAt(ym, hist, events).stock, est: false });
+                    continue;
+                }
+                const e = estimateNetWorthAt(ym, hist, events);
+                out.push({ ym, value: e.total, stock: e.stock, est: true });
             }
             return out;
         }
@@ -7803,7 +7887,7 @@ function testRun() {
                     bal[t.toAccount] += t.targetAmount ? t.targetAmount : conv(t.toAccount, t.amount);
                 }
             });
-            let total = 0;
+            let total = 0, stock = 0;
             appData.accounts.forEach(a => { total += bal[a.name] * fx(a.currency); });
             appData.stocks.forEach(s => {
                 let shares = s.shares;
@@ -7819,9 +7903,10 @@ function testRun() {
                 }
                 // 沒有歷史股價時用目前股價（只反映股數與現金變化）
                 if (!price) price = s.currentPrice || s.cost || 0;
-                total += shares * price * fx(s.currency);
+                const v = shares * price * fx(s.currency);
+                total += v; stock += v;
             });
-            return total;
+            return { total, stock };
         }
 
         function avgMonthlyNet(n) {
@@ -7890,14 +7975,21 @@ function testRun() {
                 return (i === 0 || q.m === 0) ? `${q.y % 100}/${q.m + 1}` : `${q.m + 1}月`;
             });
             const data = shown.map(p => Math.round(p.value));
+            const stockData = shown.map(p => Math.round(p.stock || 0));
+            const otherData = shown.map((p, i) => data[i] - stockData[i]);
             const goal = getGoalAmount();
             const maxV = Math.max(...data, 1);
-            const datasets = [{
-                label: '總淨資產', data, borderColor: '#9C7F66', backgroundColor: 'rgba(156,127,102,0.12)', fill: true, tension: 0.3,
-                pointRadius: 3, pointBackgroundColor: shown.map(p => p.est ? '#fff' : '#9C7F66'), pointBorderColor: '#9C7F66',
-                segment: { borderDash: ctx => (shown[ctx.p0DataIndex] && shown[ctx.p0DataIndex].est) ? [5, 4] : undefined }
-            }];
-            if (goal <= maxV * 1.4) datasets.push({ label: '目標', data: data.map(() => goal), borderColor: '#B4746A', borderDash: [3, 3], borderWidth: 1.5, pointRadius: 0, fill: false });
+            const estDash = { borderDash: ctx => (shown[ctx.p0DataIndex] && shown[ctx.p0DataIndex].est) ? [5, 4] : undefined };
+            const line = (label, d, color, extra) => Object.assign({
+                label, data: d, borderColor: color, backgroundColor: color, tension: 0.3, fill: false, borderWidth: 2,
+                pointRadius: 2.5, pointBackgroundColor: shown.map(p => p.est ? '#fff' : color), pointBorderColor: color, segment: estDash
+            }, extra || {});
+            const datasets = [
+                line('總淨資產', data, '#9C7F66', { backgroundColor: 'rgba(156,127,102,0.12)', fill: true, borderWidth: 2.5, pointRadius: 3 }),
+                line('股票', stockData, '#5B7FA6'),
+                line('非股票資產', otherData, '#6E9A6A')
+            ];
+            if (goal <= maxV * 1.4) datasets.push({ label: '目標', data: data.map(() => goal), borderColor: '#B4746A', backgroundColor: '#B4746A', borderDash: [3, 3], borderWidth: 1.5, pointRadius: 0, fill: false });
             if (nwChart) nwChart.destroy();
             nwChart = new Chart(canvas, {
                 type: 'line',
@@ -7906,7 +7998,7 @@ function testRun() {
                     responsive: true, maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { display: false },
+                        legend: { display: true, position: 'bottom', labels: { boxWidth: 12, boxHeight: 3, padding: 12, font: { size: 11 } } },
                         tooltip: { callbacks: {
                             title: items => ymLabel(shown[items[0].dataIndex].ym) + (shown[items[0].dataIndex].est ? '（估算）' : (items[0].dataIndex === shown.length - 1 ? '（目前）' : '')),
                             label: c => ` ${c.dataset.label} ${fmtTWD(c.raw)}`
@@ -7914,7 +8006,7 @@ function testRun() {
                     },
                     scales: {
                         x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
-                        y: { ticks: { font: { size: 10 }, callback: v => Math.abs(v) >= 10000 ? `${Math.round(v / 10000)}萬` : v }, grid: { color: '#EFEAE4' } }
+                        y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => Math.abs(v) >= 10000 ? `${Math.round(v / 10000)}萬` : v }, grid: { color: '#EFEAE4' } }
                     }
                 }
             });
@@ -8265,6 +8357,7 @@ function testRun() {
 
         window.onload = function() {
             if (QUICK_MODE) { initQuickMode(); return; }
+            arrangePlanTab();
             if (!SHOW_JOINT_TAB) {
                 const jb = document.querySelector('.nav-button[data-tab="joint"]');
                 if (jb) { jb.parentElement.classList.replace('grid-cols-5', 'grid-cols-4'); jb.remove(); }
@@ -8294,7 +8387,7 @@ function testRun() {
             renderV5Views();
             renderCloudBackup();
             // 記下這個月的淨資產（走勢圖用）
-            if (appData.assets.length && (appData.assetHistory || {})[nowYm()] !== Math.round(calculateTotalAsset())) saveData();
+            if (appData.assets.length && ((appData.assetHistory || {})[nowYm()] !== Math.round(calculateTotalAsset()) || (appData.stockHistory || {})[nowYm()] !== Math.round(stockValueNow()))) saveData();
             checkBudgetAlerts();
             autoCloudBackup();
             setTimeout(fetchPriceHistoryIfStale, 4000);
