@@ -4159,16 +4159,20 @@ function testRun() {
         const STMT_AMT_NOISE_RE = /本期|應繳|總額|合計|最低|上期|額度|累計|可用|循環|小計|總計|共\s*\d+\s*筆/;
         const STMT_DATE_NOISE_RE = /結帳|繳款截止|截止日|帳單日|到期|列印|查詢|起息/;
         function parseStmtColumns(lines) {
-            const dates = [], amounts = [], texts = [];
+            let dates = [], amounts = [], texts = [];
+            let li = -1, expected = 0;
             lines.forEach(line => {
+                li++;
+                const cnt = /共\s*(\d+)\s*筆/.exec(line);
+                if (cnt) expected = +cnt[1];
                 // 日期：完整日期、星展「消費日」、或 MM/DD（同一行有多個日期只取第一個，例如「消費日 - 入帳日」）
                 if (!STMT_DATE_NOISE_RE.test(line)) {
                     const cd = /消費日\s*(\d{1,2})\s*\/\s*(\d{1,2})/.exec(line);
                     const fd = STMT_FULLDATE_RE.exec(line);
                     const md = STMT_MD_RE.exec(line);
-                    if (cd) dates.push(stmtIso(stmtYearFor(+cd[1], +cd[2]), +cd[1], +cd[2]));
-                    else if (fd) dates.push(stmtIso(+fd[1], +fd[2], +fd[3]));
-                    else if (md && !/入帳日/.test(line)) dates.push(stmtIso(stmtYearFor(+md[1], +md[2]), +md[1], +md[2]));
+                    if (cd) dates.push({ v: stmtIso(stmtYearFor(+cd[1], +cd[2]), +cd[1], +cd[2]), i: li });
+                    else if (fd) dates.push({ v: stmtIso(+fd[1], +fd[2], +fd[3]), i: li });
+                    else if (md && !/入帳日/.test(line)) dates.push({ v: stmtIso(stmtYearFor(+md[1], +md[2]), +md[1], +md[2]), i: li });
                 }
                 // 金額：有 NT$／TWD／$ 的才算，排除「本期應繳」這類總額
                 if (!STMT_AMT_NOISE_RE.test(line)) {
@@ -4176,19 +4180,34 @@ function testRun() {
                     let m;
                     while ((m = re.exec(line))) {
                         const v = parseFloat(m[3].replace(/,/g, ''));
-                        if (!isNaN(v)) amounts.push(m[1] || m[2] ? -v : v);
+                        if (!isNaN(v)) amounts.push({ v: m[1] || m[2] ? -v : v, i: li });
                     }
                     if (!STMT_AMT_RE.test(line)) {
                         const credit = /(折|回饋|點數|退款|退刷)/.test(line) && /([\d,]+)\s*元/.exec(line);
-                        if (credit) amounts.push(-parseFloat(credit[1].replace(/,/g, '')));
+                        if (credit) amounts.push({ v: -parseFloat(credit[1].replace(/,/g, '')), i: li });
                     }
                 }
                 // 商店名稱：去掉日期、金額後剩下的文字
                 const t = stmtCleanMerchant(line.replace(/消費日.*$/, '').replace(new RegExp(STMT_MD_RE.source, 'g'), ' '))
                     .replace(/^[\s\-–~·•|:：]+|[\s\-–~·•|:：]+$/g, '');
                 if (t && !STMT_NOISE_RE.test(t) && !STMT_AMT_NOISE_RE.test(t) && !STMT_DATE_NOISE_RE.test(t)
-                    && !/^[\d\s.,\/\-:]+$/.test(t) && !/^(TWD|NT\$?|元)$/i.test(t) && t.length >= 2) texts.push(t);
+                    && !/^[\d\s.,\/\-:]+$/.test(t) && !/^(TWD|NT\$?|元)$/i.test(t) && !/\*{2,}\s*\d/.test(t)
+                    && t.length >= 2) texts.push({ v: t, i: li });
             });
+            // 帳單最上面的「本期金額」「卡片名稱」不是交易：數量比交易多的時候，先去掉第一個日期之前的
+            const firstDate = dates.length ? dates[0].i : Infinity;
+            const target = dates.length || expected;
+            if (target) {
+                while (amounts.length > target && amounts[0].i < firstDate) amounts.shift();
+                // 還多一個、而且剛好等於其他金額加總 → 那是帳單總額
+                if (amounts.length === target + 1) {
+                    const tot = amounts.reduce((a, x) => a + x.v, 0);
+                    const k = amounts.findIndex(x => Math.abs(x.v * 2 - tot) < 0.5);
+                    if (k >= 0) amounts.splice(k, 1);
+                }
+            }
+            while (texts.length > amounts.length && texts.length && texts[0].i < firstDate) texts.shift();
+            dates = dates.map(d => d.v); amounts = amounts.map(a => a.v); texts = texts.map(t => t.v);
             const n = amounts.length;
             const merchantsOk = texts.length === n;
             const items = amounts.map((a, i) => {
