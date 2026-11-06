@@ -1871,13 +1871,22 @@ function testRun() {
         <div class="modal-panel sm:max-w-lg">
             <div class="modal-head">
                 <div class="min-w-0">
-                    <h3 class="text-lg font-bold text-primary flex items-center gap-2"><i class="fas fa-paste text-accent"></i>帳單明細比對</h3>
+                    <h3 class="text-lg font-bold text-primary flex items-center gap-2"><i class="fas fa-paste text-accent"></i><span id="stmt-title">帳單明細比對</span></h3>
                     <p id="stmt-card-name" class="text-xs text-gray-500 truncate"></p>
                 </div>
                 <button class="icon-btn" onclick="closeStatementModal()" aria-label="關閉"><i class="fas fa-xmark"></i></button>
             </div>
             <div class="px-5 pb-6 pb-safe space-y-3">
-                <details class="rounded-xl bg-secondary/70 p-3 text-xs text-gray-600">
+                <details id="stmt-help-bank" class="hidden rounded-xl bg-secondary/70 p-3 text-xs text-gray-600">
+                    <summary class="font-bold text-primary cursor-pointer">怎麼複製帳戶明細？</summary>
+                    <ol class="list-decimal pl-4 mt-2 space-y-1">
+                        <li>在銀行 App 打開這個帳戶的「交易明細」，截圖（一頁不夠就多截幾張）</li>
+                        <li>到「照片」打開截圖，<b>長按畫面上的文字</b>，選「全選」→「拷貝」</li>
+                        <li>回來貼在下面。有多張截圖就一張一張貼，接在後面即可</li>
+                    </ol>
+                    <p class="mt-2">支出或存入看金額的正負號；沒有正負號時會看摘要（例如「轉入」「薪資」算存入）。餘額欄位不會被算進去。</p>
+                </details>
+                <details id="stmt-help-card" class="rounded-xl bg-secondary/70 p-3 text-xs text-gray-600">
                     <summary class="font-bold text-primary cursor-pointer">怎麼複製帳單文字？</summary>
                     <ol class="list-decimal pl-4 mt-2 space-y-1">
                         <li>在銀行 App 打開這張卡的帳單明細，截圖（一頁不夠就多截幾張）</li>
@@ -4145,12 +4154,67 @@ function testRun() {
             return 'datefirst';
         }
 
+        // iPhone 從照片複製文字時，有時會整欄整欄輸出（先全部日期、再全部商店、再全部金額），
+        // 一行一行配對就會對不起來。這裡改成：把日期、商店、金額各自依出現順序收集，再一對一配對。
+        const STMT_AMT_NOISE_RE = /本期|應繳|總額|合計|最低|上期|額度|累計|可用|循環|小計|總計|共\s*\d+\s*筆/;
+        const STMT_DATE_NOISE_RE = /結帳|繳款截止|截止日|帳單日|到期|列印|查詢|起息/;
+        function parseStmtColumns(lines) {
+            const dates = [], amounts = [], texts = [];
+            lines.forEach(line => {
+                // 日期：完整日期、星展「消費日」、或 MM/DD（同一行有多個日期只取第一個，例如「消費日 - 入帳日」）
+                if (!STMT_DATE_NOISE_RE.test(line)) {
+                    const cd = /消費日\s*(\d{1,2})\s*\/\s*(\d{1,2})/.exec(line);
+                    const fd = STMT_FULLDATE_RE.exec(line);
+                    const md = STMT_MD_RE.exec(line);
+                    if (cd) dates.push(stmtIso(stmtYearFor(+cd[1], +cd[2]), +cd[1], +cd[2]));
+                    else if (fd) dates.push(stmtIso(+fd[1], +fd[2], +fd[3]));
+                    else if (md && !/入帳日/.test(line)) dates.push(stmtIso(stmtYearFor(+md[1], +md[2]), +md[1], +md[2]));
+                }
+                // 金額：有 NT$／TWD／$ 的才算，排除「本期應繳」這類總額
+                if (!STMT_AMT_NOISE_RE.test(line)) {
+                    const re = new RegExp(STMT_AMT_RE.source, 'gi');
+                    let m;
+                    while ((m = re.exec(line))) {
+                        const v = parseFloat(m[3].replace(/,/g, ''));
+                        if (!isNaN(v)) amounts.push(m[1] || m[2] ? -v : v);
+                    }
+                    if (!STMT_AMT_RE.test(line)) {
+                        const credit = /(折|回饋|點數|退款|退刷)/.test(line) && /([\d,]+)\s*元/.exec(line);
+                        if (credit) amounts.push(-parseFloat(credit[1].replace(/,/g, '')));
+                    }
+                }
+                // 商店名稱：去掉日期、金額後剩下的文字
+                const t = stmtCleanMerchant(line.replace(/消費日.*$/, '').replace(new RegExp(STMT_MD_RE.source, 'g'), ' '))
+                    .replace(/^[\s\-–~·•|:：]+|[\s\-–~·•|:：]+$/g, '');
+                if (t && !STMT_NOISE_RE.test(t) && !STMT_AMT_NOISE_RE.test(t) && !STMT_DATE_NOISE_RE.test(t)
+                    && !/^[\d\s.,\/\-:]+$/.test(t) && !/^(TWD|NT\$?|元)$/i.test(t) && t.length >= 2) texts.push(t);
+            });
+            const n = amounts.length;
+            const merchantsOk = texts.length === n;
+            const items = amounts.map((a, i) => {
+                const merchant = merchantsOk ? texts[i] : '';
+                let kind = a < 0 ? 'credit' : 'expense';
+                if (STMT_PAYMENT_RE.test(merchant)) kind = 'payment';
+                return { date: dates.length === n ? dates[i] : null, amount: Math.abs(a), merchant, kind };
+            });
+            const sorted = dates.slice().sort();
+            items.mode = dates.length === n ? 'columns' : 'amounts';
+            items.amountCount = n;
+            items.range = sorted.length ? { from: sorted[0], to: sorted[sorted.length - 1] } : null;
+            return items;
+        }
+
         function parseStatement(text, format) {
             const lines = String(text || '').normalize('NFKC').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
             const parsers = { datefirst: parseStmtDateFirst, dbs: parseStmtDbs, esun: parseStmtEsun };
-            if (parsers[format]) return parsers[format](lines);
-            // 自動：三種都試，取辨識最多筆的
-            return Object.values(parsers).map(f => f(lines)).sort((a, b) => b.length - a.length)[0] || [];
+            let best;
+            if (parsers[format]) best = parsers[format](lines);
+            else best = Object.values(parsers).map(f => f(lines)).sort((a, b) => b.length - a.length)[0] || [];
+            best.mode = 'rows';
+            // 一行一行配對漏掉不少筆（文字順序亂了）→ 改用依順序配對；日期數量也對不上就只比對金額
+            const col = parseStmtColumns(lines);
+            if (col.amountCount >= 2 && best.length < col.amountCount * 0.8) return col;
+            return best;
         }
 
         function stmtDayDiff(isoA, tsB) {
@@ -4165,8 +4229,18 @@ function testRun() {
             const used = new Set();
             const results = items.map((it, i) => ({ ...it, idx: i, match: null }));
             const wantType = k => k === 'credit' ? 'income' : 'expense';
+            const DAY0 = 86400000;
+            const toTs = (iso, end) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d, end ? 23 : 0, end ? 59 : 0, end ? 59 : 0).getTime(); };
+            // 0) 沒有日期（文字順序太亂、日期對不上）：只比金額，範圍是帳單上出現的日期區間，沒有的話就最近 60 天
+            const rFrom = items.range ? toTs(items.range.from) - 3 * DAY0 : Date.now() - 60 * DAY0;
+            const rTo = items.range ? toTs(items.range.to, true) + 3 * DAY0 : Date.now();
+            results.filter(r => !r.date && r.kind !== 'payment').forEach(r => {
+                const best = recs.filter(t => !used.has(t.id) && t.type === wantType(r.kind) && Math.abs(txToTWD(t) - r.amount) < 0.5
+                    && t.timestamp >= rFrom && t.timestamp <= rTo).sort((a, b) => a.timestamp - b.timestamp)[0];
+                if (best) { used.add(best.id); r.match = best; }
+            });
             // 1) 金額相同、日期差 3 天內，取日期最接近的
-            results.filter(r => r.kind !== 'payment').forEach(r => {
+            results.filter(r => r.kind !== 'payment' && r.date).forEach(r => {
                 let best = null, bestDiff = 99;
                 recs.forEach(t => {
                     if (used.has(t.id) || t.type !== wantType(r.kind)) return;
@@ -4177,7 +4251,8 @@ function testRun() {
                 if (best) { used.add(best.id); r.match = best; }
             });
             // 帳單期間
-            const dates = items.filter(i => i.kind !== 'payment').map(i => i.date).sort();
+            const dates = items.filter(i => i.kind !== 'payment' && i.date).map(i => i.date).sort();
+            if (!dates.length && items.range) dates.push(items.range.from, items.range.to);
             let from = 0, to = 0;
             if (dates.length) {
                 const [y1, m1, d1] = dates[0].split('-').map(Number), [y2, m2, d2] = dates[dates.length - 1].split('-').map(Number);
@@ -4190,7 +4265,7 @@ function testRun() {
             // 2) 帳單兩筆 = 你記成一筆（例如 消費＋國外交易服務費、同一家店的兩筆）
             //    至少一筆要在紀錄日期 3 天內；所有可能組合一起排序，最吻合的先配
             const cands = [], maybeCands = [];
-            const openExp = results.filter(r => !r.match && r.kind === 'expense');
+            const openExp = results.filter(r => !r.match && r.kind === 'expense' && r.date);
             recs.filter(t => !used.has(t.id) && t.type === 'expense' && inRange(t)).forEach(t => {
                 for (let i = 0; i < openExp.length; i++) for (let j = i + 1; j < openExp.length; j++) {
                     const a = openExp[i], b = openExp[j];
@@ -4218,7 +4293,7 @@ function testRun() {
                 c.a.maybe = c.b.maybe = c.t;
             });
             // 3) 帳單一筆 = 你拆成兩筆記（例如同一張發票分兩個分類）
-            results.filter(r => !r.match && r.kind === 'expense').forEach(r => {
+            results.filter(r => !r.match && r.kind === 'expense' && r.date).forEach(r => {
                 const near = recs.filter(t => !used.has(t.id) && t.type === 'expense' && stmtDayDiff(r.date, t.timestamp) <= 3);
                 for (let i = 0; i < near.length; i++) for (let j = i + 1; j < near.length; j++) {
                     if (r.match) return;
@@ -4228,7 +4303,7 @@ function testRun() {
                 }
             });
             // 4) 帳單期間內有記、但帳單上沒有的
-            const extra = dates.length ? recs.filter(t => !used.has(t.id) && !maybeUsed.has(t.id) && t.type === 'expense' && t.timestamp >= from && t.timestamp <= to) : [];
+            const extra = (dates.length && items.mode !== 'amounts') ? recs.filter(t => !used.has(t.id) && !maybeUsed.has(t.id) && t.type === 'expense' && t.timestamp >= from && t.timestamp <= to) : [];
             return {
                 missing: results.filter(r => !r.match && r.kind !== 'payment'),
                 matched: results.filter(r => r.match),
@@ -4237,9 +4312,154 @@ function testRun() {
             };
         }
 
+        // ===================== 一般帳戶（銀行）明細 =====================
+        // 銀行 App 的交易明細：日期、摘要、支出／存入金額、餘額。餘額不算；方向看正負號、欄位名稱或摘要文字
+        const BANK_OUT_RE = /支出|轉出|提款|提領|扣款|扣繳|消費|繳費|繳款|付款|代扣|代繳|手續費|匯出|ATM/i;
+        const BANK_IN_RE = /存入|轉入|薪資|薪轉|薪水|利息|入帳|退款|退匯|匯入|股利|收入|存款息/;
+        const BANK_NOISE_RE = /^(日期|交易日期|摘要|說明|備註|支出|存入|提款|餘額|金額|帳號|幣別|明細|交易明細|全部|篩選|查詢|帳戶)$|帳戶餘額|可用餘額|^共\s*\d+\s*筆/;
+        const BANK_NUM_RE = /([+\-−－])?\s*(?:NT\$|TWD|\$)?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)/g;
+
+        function bankLineDate(line) {
+            const fd = STMT_FULLDATE_RE.exec(line);
+            if (fd) return { iso: stmtIso(+fd[1], +fd[2], +fd[3]), rest: line.replace(fd[0], ' ') };
+            const md = STMT_MD_RE.exec(line);
+            if (md) return { iso: stmtIso(stmtYearFor(+md[1], +md[2]), +md[1], +md[2]), rest: line.replace(`${md[1]}/${md[2]}`, ' ') };
+            return null;
+        }
+        // 一行裡可能的金額：要有正負號、NT$／$、千分位逗號，或整行只有這個數字（避免把「7-11」當成 -11）
+        function bankLineAmounts(line) {
+            let l = line.replace(/\d{1,2}:\d{2}(:\d{2})?/g, ' ');
+            let hasBalance = false;
+            l = l.replace(/(帳戶)?餘額\s*[:：]?\s*[+\-−－]?\s*(?:NT\$|TWD|\$)?\s*[\d,]+(\.\d+)?/g, () => { hasBalance = true; return ' '; });
+            const whole = /^\s*[+\-−－]?\s*(?:NT\$|TWD|\$)?\s*[\d,]+(\.\d+)?\s*元?\s*$/.test(l);
+            // 行尾連續的數字區（例如「跨行轉出 1,200 25,300」的 1,200 與 25,300）
+            const tail = /(?:^|\s)((?:[+\-−－]?\s*(?:NT\$|\$)?\s*[\d,]+(?:\.\d+)?\s*)+)$/.exec(l);
+            const tailStart = tail ? l.length - tail[1].length : l.length;
+            const label = /存入|轉入|收入/.test(l) ? 1 : (/支出|提款|轉出/.test(l) ? -1 : 0);
+            const out = [];
+            let m;
+            const re = new RegExp(BANK_NUM_RE.source, 'g');
+            while ((m = re.exec(l))) {
+                const token = m[0];
+                const sign = m[1] ? ('+'.includes(m[1]) ? 1 : -1) : 0;
+                // 「-」緊貼在字或數字後面（例如 7-11）不是負號，那個數字也不是金額
+                const startIdx = m.index + (m[0].length - m[0].trimStart().length);
+                const before = l[startIdx - 1];
+                if (before && /[A-Za-z0-9一-鿿]/.test(before)) continue;
+                const realSign = sign;
+                const ok = whole || realSign !== 0 || /NT\$|TWD|\$/.test(token) || m[2].includes(',') || startIdx >= tailStart || label !== 0;
+                if (!ok) continue;
+                const v = parseFloat(m[2].replace(/,/g, ''));
+                if (!isNaN(v) && v > 0) out.push({ v, sign: realSign || label });
+            }
+            return { out, hasBalance };
+        }
+        function bankDirection(sign, text) {
+            if (sign) return sign;
+            if (BANK_IN_RE.test(text)) return 1;
+            if (BANK_OUT_RE.test(text)) return -1;
+            return -1;
+        }
+
+        function parseBankStatement(text) {
+            const lines = String(text || '').normalize('NFKC').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            // 一行一行：日期開始一筆，這筆裡第一個金額是交易金額，後面沒標示的通常是餘額
+            const rows = []; let rec = null;
+            const finish = () => {
+                if (!rec || !rec.amts.length) return;
+                const a = rec.amts[0];
+                const merchant = rec.texts.join(' ').slice(0, 40);
+                const dir = bankDirection(a.sign, merchant);
+                rows.push({ date: rec.date, amount: a.v, merchant, kind: dir > 0 ? 'credit' : 'expense', guessed: !a.sign });
+            };
+            const allAmts = [], allDates = [], allTexts = [];
+            lines.forEach(line => {
+                const d = bankLineDate(line);
+                let rest = line;
+                if (d) { finish(); rec = { date: d.iso, amts: [], texts: [] }; rest = d.rest; allDates.push(d.iso); }
+                const { out } = bankLineAmounts(rest);
+                out.forEach(a => allAmts.push(a));
+                const t = rest.replace(/(帳戶)?餘額.*$/, '').replace(new RegExp(BANK_NUM_RE.source, 'g'), (m, sg, num, off, str) => {
+                        const before = str[off + (m.length - m.trimStart().length) - 1];
+                        if (before && /[A-Za-z0-9一-鿿]/.test(before)) return m;   // 7-11 這種留著
+                        return (/[+\-−－,$]|NT|TWD/.test(m) || /^[\s\d.,+\-−－$NT]*$/.test(str.slice(off))) ? ' ' : m;
+                    })
+                    .replace(/\d{1,2}:\d{2}(:\d{2})?/g, ' ').replace(/\s+/g, ' ').trim();
+                const isText = t && !BANK_NOISE_RE.test(t) && !/^[\d\s.,:\/\-]+$/.test(t) && t.length >= 2;
+                if (isText) allTexts.push(t);
+                if (!rec) return;
+                rec.amts.push(...out);
+                if (isText) rec.texts.push(t);
+            });
+            finish();
+            rows.mode = 'rows';
+            // 文字順序亂掉（日期都擠在一起）：日期和有正負號的金額數量一樣就依順序配對，否則只比金額
+            const signed = allAmts.filter(a => a.sign);
+            if (signed.length >= 2 && rows.length < signed.length * 0.8) {
+                const n = signed.length;
+                const sorted = allDates.slice().sort();
+                const items = signed.map((a, i) => ({
+                    date: allDates.length === n ? allDates[i] : null, amount: a.v,
+                    merchant: allTexts.length === n ? allTexts[i] : '', kind: a.sign > 0 ? 'credit' : 'expense'
+                }));
+                items.mode = allDates.length === n ? 'columns' : 'amounts';
+                items.range = sorted.length ? { from: sorted[0], to: sorted[sorted.length - 1] } : null;
+                return items;
+            }
+            return rows;
+        }
+
+        function matchBankStatement(items, accName) {
+            const acc = getAccountByName(accName);
+            const accCur = acc ? acc.currency : 'TWD';
+            const inAcc = (t, amt) => t.currency === accCur ? amt : convertToTWD(amt, t.currency) / (appData.exchangeRates[accCur] || 1);
+            // 這個帳戶的每筆進出：out = 錢出去、in = 錢進來
+            const recs = [];
+            appData.transactions.forEach(t => {
+                if (t.account === accName) {
+                    const dir = (t.type === 'income' || t.type === 'investment_income') ? 'in' : 'out';
+                    recs.push({ t, dir, amt: inAcc(t, t.amount) });
+                }
+                if (t.type === 'transfer' && t.toAccount === accName) {
+                    recs.push({ t, dir: 'in', amt: t.targetAmount ? t.targetAmount : inAcc(t, t.amount) });
+                }
+            });
+            const used = new Set();
+            const key = r => r.t.id + r.dir;
+            const results = items.map((it, i) => ({ ...it, idx: i, match: null }));
+            const want = r => r.kind === 'credit' ? 'in' : 'out';
+            const DAY = 86400000;
+            const toTs = (iso, end) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d, end ? 23 : 0, end ? 59 : 0, end ? 59 : 0).getTime(); };
+            const dates = items.filter(i => i.date).map(i => i.date).sort();
+            const range = dates.length ? { from: dates[0], to: dates[dates.length - 1] } : items.range;
+            const from = range ? toTs(range.from) : Date.now() - 60 * DAY;
+            const to = range ? toTs(range.to, true) : Date.now();
+            results.forEach(r => {
+                let best = null, bestDiff = 99;
+                recs.forEach(x => {
+                    if (used.has(key(x)) || x.dir !== want(r) || Math.abs(x.amt - r.amount) >= 0.5) return;
+                    let diff;
+                    if (r.date) diff = stmtDayDiff(r.date, x.t.timestamp);
+                    else diff = (x.t.timestamp >= from - 3 * DAY && x.t.timestamp <= to + 3 * DAY) ? 0 : 99;
+                    if (diff <= 3 && diff < bestDiff) { best = x; bestDiff = diff; }
+                });
+                if (best) { used.add(key(best)); r.match = best.t; }
+            });
+            const extra = (range && items.mode !== 'amounts')
+                ? recs.filter(x => !used.has(key(x)) && x.t.timestamp >= from && x.t.timestamp <= to).map(x => ({ ...x.t, _dir: x.dir }))
+                : [];
+            return { missing: results.filter(r => !r.match), matched: results.filter(r => r.match), skipped: [], extra };
+        }
+
         function openStatementModal() {
             const card = batchState.account;
-            if (!card || !checkIsCreditCard(card)) { showAlert('warning', '請先在上方選擇一張信用卡'); return; }
+            if (!card) { showAlert('warning', '請先在上方選擇帳戶或信用卡'); return; }
+            const isCard = checkIsCreditCard(card);
+            document.getElementById('stmt-format').closest('div').classList.toggle('hidden', !isCard);
+            document.getElementById('stmt-help-card').classList.toggle('hidden', !isCard);
+            document.getElementById('stmt-help-bank').classList.toggle('hidden', isCard);
+            document.getElementById('stmt-title').textContent = isCard ? '帳單明細比對' : '帳戶明細比對';
+            document.getElementById('stmt-text').placeholder = isCard ? '在這裡貼上帳單明細文字…' : '在這裡貼上銀行 App 的交易明細文字…';
             document.getElementById('stmt-card-name').textContent = card;
             document.getElementById('stmt-format').value = 'auto';
             document.getElementById('stmt-results').innerHTML = '';
@@ -4252,43 +4472,55 @@ function testRun() {
         function runStatementMatch() {
             const card = batchState.account;
             const text = document.getElementById('stmt-text').value;
-            let fmt = document.getElementById('stmt-format').value;
-            if (fmt === 'auto') fmt = stmtFormatFor(card);
-            let items = parseStatement(text, fmt);
-            if (!items.length) items = parseStatement(text, 'any');
+            const isBank = !checkIsCreditCard(card);
+            let items;
+            if (isBank) {
+                items = parseBankStatement(text);
+            } else {
+                let fmt = document.getElementById('stmt-format').value;
+                if (fmt === 'auto') fmt = stmtFormatFor(card);
+                items = parseStatement(text, fmt);
+                if (!items.length) items = parseStatement(text, 'any');
+            }
             const box = document.getElementById('stmt-results');
             if (!items.length) {
-                box.innerHTML = '<div class="rounded-xl bg-amber-50 text-amber-900 text-sm p-3">沒有辨識到任何一筆。請確認貼上的是帳單明細文字，或在上方換一種「帳單格式」再試。</div>';
+                box.innerHTML = `<div class="rounded-xl bg-amber-50 text-amber-900 text-sm p-3">沒有辨識到任何一筆。${isBank ? '請確認貼上的是銀行 App 的交易明細文字（要有日期和金額）。' : '請確認貼上的是帳單明細文字，或在上方換一種「帳單格式」再試。'}</div>`;
                 return;
             }
-            stmtResult = matchStatement(items, card);
+            stmtResult = isBank ? matchBankStatement(items, card) : matchStatement(items, card);
+            stmtResult.isBank = isBank;
             const { missing, matched, skipped, extra } = stmtResult;
             const sum = items.filter(i => i.kind === 'expense').reduce((s, i) => s + i.amount, 0)
                 - items.filter(i => i.kind === 'credit').reduce((s, i) => s + i.amount, 0);
+            const outSum = items.filter(i => i.kind === 'expense').reduce((s, i) => s + i.amount, 0);
+            const inSum = items.filter(i => i.kind === 'credit').reduce((s, i) => s + i.amount, 0);
             const row = (r, withBox) => `
                 <label class="flex items-center gap-2 py-2 border-t border-line first:border-0 ${withBox ? 'cursor-pointer' : ''}">
                     ${withBox ? `<input type="checkbox" class="stmt-pick h-4 w-4 accent-[#9C7F66] shrink-0" data-idx="${r.idx}" ${r.maybe ? '' : 'checked'}>` : ''}
-                    <span class="text-xs text-gray-500 w-11 shrink-0 tabular-nums">${r.date.slice(5).replace('-', '/')}</span>
+                    <span class="text-xs text-gray-500 w-11 shrink-0 tabular-nums">${r.date ? r.date.slice(5).replace('-', '/') : '—'}</span>
                     <span class="text-sm text-primary min-w-0 flex-1 truncate">${escapeHtml(r.merchant || '（無商店名稱）')}${r.combined ? ' <span class="chip bg-secondary text-gray-500">記成一筆</span>' : ''}${r.split ? ' <span class="chip bg-secondary text-gray-500">分兩筆記</span>' : ''}${r.maybe ? `<span class="block text-[11px] text-blue-700">可能是 ${toLocalDateString(r.maybe.timestamp).slice(5).replace('-', '/')} 記的 ${formatCurrency(r.maybe.amount, r.maybe.currency)}（兩筆合計），已先不勾</span>` : ''}</span>
-                    <span class="text-sm font-bold tabular-nums shrink-0 ${r.kind === 'credit' ? 'text-green-700' : 'text-primary'}">${r.kind === 'credit' ? '+' : ''}${formatCurrency(r.amount, 'TWD')}</span>
+                    <span class="text-sm font-bold tabular-nums shrink-0 ${r.kind === 'credit' ? 'text-green-700' : 'text-primary'}">${r.kind === 'credit' ? '+' : (isBank ? '−' : '')}${formatCurrency(r.amount, 'TWD')}${r.guessed ? '<span class="block text-[10px] text-gray-400 font-normal text-right">方向用摘要判斷</span>' : ''}</span>
                 </label>`;
             box.innerHTML = `
                 <div class="grid grid-cols-3 gap-2 text-center mb-3">
                     <div class="rounded-xl bg-amber-50 p-2"><p class="text-[11px] text-amber-800">沒記到</p><p class="font-bold text-amber-900">${missing.length}</p></div>
                     <div class="rounded-xl bg-green-50 p-2"><p class="text-[11px] text-green-800">已記過</p><p class="font-bold text-green-900">${matched.length}</p></div>
-                    <div class="rounded-xl bg-secondary p-2"><p class="text-[11px] text-gray-500">帳單上沒有</p><p class="font-bold text-primary">${extra.length}</p></div>
+                    <div class="rounded-xl bg-secondary p-2"><p class="text-[11px] text-gray-500">${isBank ? '明細上沒有' : '帳單上沒有'}</p><p class="font-bold text-primary">${extra.length}</p></div>
                 </div>
-                <p class="text-[11px] text-gray-400 mb-3">辨識到 ${items.length} 筆，明細合計 NT$${formatCurrency(sum, 'TWD')}${skipped.length ? `（略過 ${skipped.length} 筆繳款）` : ''}</p>
+                ${items.mode === 'columns' ? '<p class="text-[11px] rounded-lg bg-blue-50 text-blue-800 px-3 py-2 mb-2"><i class="fas fa-shuffle mr-1"></i>貼上的文字順序有點亂，已改成把日期、商店、金額依出現順序一對一配對。</p>' : ''}
+                ${items.mode === 'amounts' ? '<p class="text-[11px] rounded-lg bg-amber-50 text-amber-900 px-3 py-2 mb-2"><i class="fas fa-circle-info mr-1"></i>貼上的文字順序太亂，日期對不起來，這次<b>只用金額比對</b>（帳單期間內同金額就算記過）。沒記到的那幾筆加入批次補帳後，請自己改一下日期。</p>' : ''}
+                <p class="text-[11px] text-gray-400 mb-3">辨識到 ${items.length} 筆，${isBank ? `支出 ${formatCurrency(outSum, 'TWD')}、存入 ${formatCurrency(inSum, 'TWD')}` : `明細合計 NT$${formatCurrency(sum, 'TWD')}`}${skipped.length ? `（略過 ${skipped.length} 筆繳款）` : ''}</p>
                 ${missing.length ? `
                     <div class="rounded-xl border border-amber-200 p-3 mb-3">
                         <p class="text-sm font-bold text-amber-900 mb-1"><i class="fas fa-triangle-exclamation mr-1"></i>沒記到的</p>
                         ${missing.map(r => row(r, true)).join('')}
                         <button onclick="addStatementMissingToBatch()" class="btn-primary w-full !h-10 text-sm mt-2"><i class="fas fa-plus"></i>加入批次補帳</button>
-                    </div>` : '<div class="rounded-xl bg-green-50 text-green-800 text-sm font-bold text-center p-3 mb-3"><i class="fas fa-circle-check mr-1"></i>帳單上的每一筆都記過了！</div>'}
+                        ${isBank ? '<p class="text-[11px] text-gray-500 mt-2">轉帳、繳卡費這類請到「記一筆」用「轉帳」記，或繳卡費用「理財規劃」的繳款按鈕，比較不會重複；這裡只會補成支出或收入。</p>' : ''}
+                    </div>` : `<div class="rounded-xl bg-green-50 text-green-800 text-sm font-bold text-center p-3 mb-3"><i class="fas fa-circle-check mr-1"></i>${isBank ? '明細上' : '帳單上'}的每一筆都記過了！</div>`}
                 ${extra.length ? `
                     <div class="rounded-xl border border-line p-3 mb-3">
-                        <p class="text-sm font-bold text-primary">有記、但帳單上沒有的</p>
-                        <p class="text-[11px] text-gray-500 mb-1">可能是金額記錯、記錯卡、交易沒完成（例如只收到驗證碼），或會出現在下一期帳單</p>
+                        <p class="text-sm font-bold text-primary">有記、但${isBank ? '明細' : '帳單'}上沒有的</p>
+                        <p class="text-[11px] text-gray-500 mb-1">${isBank ? '可能是金額記錯、記錯帳戶，或銀行還沒入帳' : '可能是金額記錯、記錯卡、交易沒完成（例如只收到驗證碼），或會出現在下一期帳單'}</p>
                         ${extra.map(t => `
                             <div class="flex items-center gap-2 py-2 border-t border-line first:border-0">
                                 <span class="text-xs text-gray-500 w-11 shrink-0 tabular-nums">${toLocalDateString(t.timestamp).slice(5).replace('-', '/')}</span>
@@ -4309,14 +4541,16 @@ function testRun() {
             const picked = new Set([...document.querySelectorAll('.stmt-pick:checked')].map(el => +el.dataset.idx));
             const rows = stmtResult.missing.filter(r => picked.has(r.idx));
             if (!rows.length) { showAlert('warning', '請勾選要補記的項目'); return; }
+            const isBank = !!stmtResult.isBank;
             batchState.rows = batchState.rows.filter(r => !isBatchRowEmpty(r));
             rows.forEach(r => {
                 const isCredit = r.kind === 'credit';
                 batchState.rows.push({
                     ...newBatchRow(),
-                    date: r.date,
+                    date: r.date || newBatchRow().date,
                     type: isCredit ? 'income' : 'expense',
-                    cat: isCredit ? (/點|回饋|point/i.test(r.merchant) ? '回饋金' : '退刷') : '',
+                    cat: isBank ? (isCredit && /利息|存款息/.test(r.merchant) && INCOME_CATEGORIES_LIST.includes('利息') ? '利息' : (isCredit && /薪/.test(r.merchant) && INCOME_CATEGORIES_LIST.includes('薪水') ? '薪水' : ''))
+                        : (isCredit ? (/點|回饋|point/i.test(r.merchant) ? '回饋金' : '退刷') : ''),
                     sub: '',
                     amount: String(r.amount),
                     note: r.merchant
@@ -5840,7 +6074,8 @@ function testRun() {
                         <span class="text-sm text-gray-600 shrink-0">實際餘額</span>
                         <input id="batch-actual-balance" type="number" inputmode="decimal" step="any" class="field-sm text-right font-bold tabular-nums" placeholder="輸入銀行顯示的餘額" value="${escapeHtml(batchState.actualBalances[accName] || '')}">
                     </label>
-                    <div id="rc-diff" class="mt-3 rounded-xl p-3 text-sm font-bold text-center"></div>`;
+                    <div id="rc-diff" class="mt-3 rounded-xl p-3 text-sm font-bold text-center"></div>
+                    <button onclick="openStatementModal()" class="w-full h-11 mt-2 rounded-xl border border-accent/40 bg-accent/5 text-accent text-sm font-bold hover:bg-accent/10"><i class="fas fa-paste mr-1.5"></i>貼上帳戶明細，找出沒記到的</button>`;
                 document.getElementById('batch-actual-balance').oninput = function() {
                     batchState.actualBalances[accName] = this.value;
                     saveBatchDraft();
