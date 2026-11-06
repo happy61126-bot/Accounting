@@ -4350,7 +4350,7 @@ function testRun() {
                 const ok = whole || realSign !== 0 || /NT\$|TWD|\$/.test(token) || m[2].includes(',') || startIdx >= tailStart || label !== 0;
                 if (!ok) continue;
                 const v = parseFloat(m[2].replace(/,/g, ''));
-                if (!isNaN(v) && v > 0) out.push({ v, sign: realSign || label });
+                if (!isNaN(v) && v > 0) out.push({ v, sign: realSign || label, explicit: realSign });
             }
             return { out, hasBalance };
         }
@@ -4370,7 +4370,7 @@ function testRun() {
                 const a = rec.amts[0];
                 const merchant = rec.texts.join(' ').slice(0, 40);
                 const dir = bankDirection(a.sign, merchant);
-                rows.push({ date: rec.date, amount: a.v, merchant, kind: dir > 0 ? 'credit' : 'expense', guessed: !a.sign });
+                rows.push({ date: rec.date, amount: a.v, merchant, kind: dir > 0 ? 'credit' : 'expense', guessed: !a.sign, sign: a.explicit || 0 });
             };
             const allAmts = [], allDates = [], allTexts = [];
             lines.forEach(line => {
@@ -4392,6 +4392,9 @@ function testRun() {
                 if (isText) rec.texts.push(t);
             });
             finish();
+            // 像台新 Richart：支出有「-」、存入沒有符號 → 有負號的明細裡，沒符號的就是存入
+            const negs = rows.filter(r => r.sign < 0).length, poss = rows.filter(r => r.sign > 0).length;
+            if (negs && !poss) rows.forEach(r => { if (!r.sign) { r.kind = 'credit'; r.guessed = false; } });
             rows.mode = 'rows';
             // 文字順序亂掉（日期都擠在一起）：日期和有正負號的金額數量一樣就依順序配對，否則只比金額
             const signed = allAmts.filter(a => a.sign);
